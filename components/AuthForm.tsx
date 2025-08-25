@@ -12,17 +12,30 @@ interface AuthFormProps {
   onAuth: (email: string, password: string, team?: string) => void
   mode: "login" | "register"
   teams?: { team_id: string; name: string }[]
+  error?: string | null
 }
 
-export default function AuthForm({ onAuth, mode, teams = [] }: AuthFormProps) {
+export default function AuthForm({ onAuth, mode, teams = [], error }: AuthFormProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [team, setTeam] = useState("")
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
+    
+    // Basic validation
     if (mode === "register" && (!email || !password || !team)) return
     if (mode === "login" && (!email || !password)) return
+    
+    // .edu email validation for registration
+    if (mode === "register") {
+      const emailDomain = email.split('@')[1]?.toLowerCase()
+      if (!emailDomain || !emailDomain.endsWith('.edu')) {
+        alert('Only .edu email addresses are allowed for registration.')
+        return
+      }
+    }
+    
     onAuth(email, password, mode === "register" ? team : undefined)
   }
 
@@ -33,7 +46,7 @@ export default function AuthForm({ onAuth, mode, teams = [] }: AuthFormProps) {
           <CardTitle className="text-2xl">{mode === "login" ? "Sign In" : "Sign Up"}</CardTitle>
           <CardDescription>
             {mode === "login"
-              ? "Welcome back to UCI Baseball Stats"
+              ? "Welcome back to StatTrack Baseball"
               : "Create your account to access baseball stats"}
           </CardDescription>
         </CardHeader>
@@ -48,9 +61,14 @@ export default function AuthForm({ onAuth, mode, teams = [] }: AuthFormProps) {
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="Enter your email"
+                placeholder={mode === "register" ? "Enter your .edu email" : "Enter your email"}
                 required
               />
+              {mode === "register" && (
+                <p className="text-xs text-gray-500 mt-1">
+                  Only .edu email addresses are allowed for registration
+                </p>
+              )}
             </div>
 
             <div>
@@ -88,6 +106,38 @@ export default function AuthForm({ onAuth, mode, teams = [] }: AuthFormProps) {
             <Button type="submit" className="w-full">
               {mode === "login" ? "Sign In" : "Sign Up"}
             </Button>
+            
+            {error && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-md">
+                <p className="text-sm text-red-600">{error}</p>
+                {mode === "login" && typeof error === 'string' && error.includes("verify your email") && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/auth/start-verify', {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ email })
+                        })
+                        if (res.ok) {
+                          alert('Verification email sent! Check your inbox and the server console for the verification URL.')
+                        } else {
+                          alert('Failed to send verification email. Please try again.')
+                        }
+                      } catch (err) {
+                        alert('Error sending verification email. Please try again.')
+                      }
+                    }}
+                  >
+                    Resend Verification Email
+                  </Button>
+                )}
+              </div>
+            )}
           </form>
         </CardContent>
       </Card>

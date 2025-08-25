@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { parseGameDate } from "@/lib/utils"
 import { ArrowLeft, Calendar, MapPin, Users, Clock, Filter, Trash2, AlertTriangle, TrendingUp } from "lucide-react"
 
-interface Game {
+interface CachedGame {
   id: number
   game_id: string
   game_uid: string
@@ -20,12 +20,11 @@ interface Game {
   league: string
   home_team: string
   away_team: string
-  innings?: any[]
 }
 
 interface Season {
   season: string
-  games: Game[]
+  games: CachedGame[]
 }
 
 export default function ImportedGamesPage() {
@@ -51,32 +50,56 @@ export default function ImportedGamesPage() {
       .then(data => {
         if (data && data.user && data.user.email) {
           setUserEmail(data.user.email)
-          // Fetch user's games
-          return fetch("/api/user-games", { credentials: "include" })
-        }
-        return null
-      })
-      .then(res => {
-        if (!res) return null
-        if (!res.ok) {
-          throw new Error("Failed to fetch games")
-        }
-        return res.json()
-      })
-      .then(data => {
-        if (data && Array.isArray(data)) {
-          console.log('=== IMPORTED GAMES DEBUG ===')
-          console.log('Games prop:', data)
-          console.log('=== END DEBUG ===')
-          setSeasons(data)
+          // Load games from localStorage cache
+          loadGamesFromCache()
         }
         setLoading(false)
       })
       .catch(err => {
-        console.error("Error fetching games:", err)
+        console.error("Error during auth check:", err)
         setLoading(false)
       })
   }, [router])
+
+  const loadGamesFromCache = () => {
+    try {
+      const cachedGames = localStorage.getItem('cachedUserGames')
+      if (cachedGames) {
+        const parsedGames = JSON.parse(cachedGames)
+        console.log('=== LOADING FROM CACHE ===')
+        console.log('Cached games:', parsedGames)
+        console.log('=== END CACHE DEBUG ===')
+        setSeasons(parsedGames)
+      } else {
+        // If no cache, fetch from API and cache it
+        fetchAndCacheGames()
+      }
+    } catch (error) {
+      console.error('Error loading from cache:', error)
+      // If cache is corrupted, fetch from API
+      fetchAndCacheGames()
+    }
+  }
+
+  const fetchAndCacheGames = async () => {
+    try {
+      const response = await fetch("/api/user-games", { credentials: "include" })
+      if (!response.ok) {
+        throw new Error("Failed to fetch games")
+      }
+      const data = await response.json()
+      if (Array.isArray(data)) {
+        console.log('=== FETCHING AND CACHING ===')
+        console.log('Games from API:', data)
+        console.log('=== END FETCH DEBUG ===')
+        setSeasons(data)
+        // Cache the games data
+        localStorage.setItem('cachedUserGames', JSON.stringify(data))
+      }
+    } catch (error) {
+      console.error("Error fetching games:", error)
+    }
+  }
 
   const formatDate = (dateString: string) => {
     const date = parseGameDate(dateString)
@@ -97,15 +120,6 @@ export default function ImportedGamesPage() {
       case 'high school': return 'bg-orange-100 text-orange-800'
       default: return 'bg-gray-100 text-gray-800'
     }
-  }
-
-  const getPitchCount = (game: Game) => {
-    if (!game.innings) return 0
-    return game.innings.reduce((total, inning) => {
-      return total + inning.plate_appearances.reduce((inningTotal: number, pa: any) => {
-        return inningTotal + (pa.pitches?.length || 0)
-      }, 0)
-    }, 0)
   }
 
   const handleDeleteGame = async (gameId: string, gameName: string) => {
@@ -134,12 +148,52 @@ export default function ImportedGamesPage() {
         throw new Error(errorData.message || 'Failed to delete game')
       }
 
-      // Refresh the games list
-      const gamesResponse = await fetch("/api/user-games", { credentials: "include" })
-      if (gamesResponse.ok) {
-        const gamesData = await gamesResponse.json()
-        if (Array.isArray(gamesData)) {
+      // Refresh the cache from the server to ensure consistency
+      try {
+        const cacheRes = await fetch("/api/cache-user-games", {
+          method: "POST",
+          credentials: "include",
+        })
+        if (cacheRes.ok) {
+          const gamesData = await cacheRes.json()
+          localStorage.setItem('cachedUserGames', JSON.stringify(gamesData))
           setSeasons(gamesData)
+          
+          // Debug: Show cache update after delete
+          console.log('=== DELETE CACHE DEBUG ===')
+          console.log('Game deleted successfully:', gameToDelete.name)
+          console.log('Cache refreshed after delete')
+          console.log('Updated cached games data:', gamesData)
+          console.log('Cache size:', JSON.stringify(gamesData).length, 'bytes')
+          console.log('Number of seasons:', gamesData.length)
+          console.log('Total games:', gamesData.reduce((total: number, season: any) => total + season.games.length, 0))
+          console.log('Cache updated in localStorage as "cachedUserGames"')
+          console.log('=== END DELETE CACHE DEBUG ===')
+        }
+      } catch (error) {
+        console.error('Error refreshing games cache after delete:', error)
+        // Fallback to manual cache update
+        const cachedGames = localStorage.getItem('cachedUserGames')
+        if (cachedGames) {
+          const parsedGames = JSON.parse(cachedGames)
+          const updatedGames = parsedGames.map((season: Season) => ({
+            ...season,
+            games: season.games.filter((game: CachedGame) => game.game_id !== gameToDelete.id)
+          })).filter((season: Season) => season.games.length > 0)
+          
+          localStorage.setItem('cachedUserGames', JSON.stringify(updatedGames))
+          setSeasons(updatedGames)
+          
+          // Debug: Show fallback cache update after delete
+          console.log('=== DELETE CACHE FALLBACK DEBUG ===')
+          console.log('Game deleted successfully:', gameToDelete.name)
+          console.log('Cache updated using fallback method')
+          console.log('Updated cached games data:', updatedGames)
+          console.log('Cache size:', JSON.stringify(updatedGames).length, 'bytes')
+          console.log('Number of seasons:', updatedGames.length)
+          console.log('Total games:', updatedGames.reduce((total: number, season: any) => total + season.games.length, 0))
+          console.log('Cache updated in localStorage as "cachedUserGames"')
+          console.log('=== END DELETE CACHE FALLBACK DEBUG ===')
         }
       }
 
@@ -321,24 +375,20 @@ export default function ImportedGamesPage() {
                               <Badge className={getLevelColor(game.level)}>
                                 {game.level}
                               </Badge>
-                                                             <Button
-                                 variant="ghost"
-                                 size="sm"
-                                 onClick={() => handleDeleteGame(game.game_id, `${game.away_team} @ ${game.home_team}`)}
-                                 disabled={deletingGameId === game.game_id}
-                                 className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50"
-                                 title="Delete game"
-                               >
-                                 {deletingGameId === game.game_id ? (
-                                   <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
-                                 ) : (
-                                   <Trash2 className="w-4 h-4" />
-                                 )}
-                               </Button>
-                            </div>
-                            <div className="flex items-center gap-1 text-xs text-gray-500">
-                              <Clock className="w-3 h-3" />
-                              {getPitchCount(game)} pitches
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteGame(game.game_id, `${game.away_team} @ ${game.home_team}`)}
+                                disabled={deletingGameId === game.game_id}
+                                className="h-8 w-8 p-0 text-red-500 hover:text-red-700 hover:bg-red-50 disabled:opacity-50"
+                                title="Delete game"
+                              >
+                                {deletingGameId === game.game_id ? (
+                                  <div className="w-4 h-4 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <Trash2 className="w-4 h-4" />
+                                )}
+                              </Button>
                             </div>
                           </div>
                         </div>
@@ -367,57 +417,57 @@ export default function ImportedGamesPage() {
               </div>
             ))}
           </div>
-                 )}
+        )}
 
-         {/* Delete Confirmation Modal */}
-         {showDeleteConfirm && gameToDelete && (
-           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-             <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
-               <div className="flex items-center gap-3 mb-4">
-                 <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
-                   <AlertTriangle className="w-5 h-5 text-red-600" />
-                 </div>
-                 <div>
-                   <h3 className="text-lg font-semibold text-gray-900">Delete Game</h3>
-                   <p className="text-sm text-gray-600">This action cannot be undone</p>
-                 </div>
-               </div>
-               
-               <p className="text-gray-700 mb-6">
-                 Are you sure you want to delete <span className="font-semibold">"{gameToDelete.name}"</span>? 
-                 This will permanently remove the game and all associated data.
-               </p>
-               
-               <div className="flex gap-3 justify-end">
-                 <Button
-                   variant="outline"
-                   onClick={() => {
-                     setShowDeleteConfirm(false)
-                     setGameToDelete(null)
-                   }}
-                   disabled={deletingGameId === gameToDelete.id}
-                 >
-                   Cancel
-                 </Button>
-                 <Button
-                   variant="destructive"
-                   onClick={confirmDeleteGame}
-                   disabled={deletingGameId === gameToDelete.id}
-                 >
-                   {deletingGameId === gameToDelete.id ? (
-                     <div className="flex items-center gap-2">
-                       <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                       Deleting...
-                     </div>
-                   ) : (
-                     'Delete Game'
-                   )}
-                 </Button>
-               </div>
-             </div>
-           </div>
-         )}
-       </div>
-     </Layout>
-   )
- }
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && gameToDelete && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-lg p-6 max-w-md w-full mx-4">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-10 h-10 bg-red-100 rounded-full flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-red-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900">Delete Game</h3>
+                  <p className="text-sm text-gray-600">This action cannot be undone</p>
+                </div>
+              </div>
+              
+              <p className="text-gray-700 mb-6">
+                Are you sure you want to delete <span className="font-semibold">"{gameToDelete.name}"</span>? 
+                This will permanently remove the game and all associated data.
+              </p>
+              
+              <div className="flex gap-3 justify-end">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setShowDeleteConfirm(false)
+                    setGameToDelete(null)
+                  }}
+                  disabled={deletingGameId === gameToDelete.id}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={confirmDeleteGame}
+                  disabled={deletingGameId === gameToDelete.id}
+                >
+                  {deletingGameId === gameToDelete.id ? (
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                      Deleting...
+                    </div>
+                  ) : (
+                    'Delete Game'
+                  )}
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Layout>
+  )
+}

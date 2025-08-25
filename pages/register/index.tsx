@@ -22,10 +22,13 @@ export default function RegisterPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email, password, team_id: team }),
     })
+    const data = await res.json()
+    
     if (res.ok) {
+      // Show success message with verification info
+      alert(`Registration successful! ${data.message}\n\nFor development: Check the server console for the verification URL.`)
       router.push("/login")
     } else {
-      const data = await res.json()
       setError(data.error || "Registration failed")
     }
   }

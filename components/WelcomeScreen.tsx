@@ -43,6 +43,31 @@ export default function WelcomeScreen({ userEmail, onNavigate }: WelcomeScreenPr
     }
     if (res.ok) {
       setMessage("File imported successfully!")
+      // Refresh the games cache after successful import
+      try {
+        const cacheRes = await fetch("/api/cache-user-games", {
+          method: "POST",
+          credentials: "include",
+        })
+        if (cacheRes.ok) {
+          const gamesData = await cacheRes.json()
+          localStorage.setItem('cachedUserGames', JSON.stringify(gamesData))
+          
+          // Debug: Show cache update after import
+          console.log('=== IMPORT CACHE DEBUG ===')
+          console.log('Game imported successfully!')
+          console.log('Cache refreshed after import')
+          console.log('Updated cached games data:', gamesData)
+          console.log('Cache size:', JSON.stringify(gamesData).length, 'bytes')
+          console.log('Number of seasons:', gamesData.length)
+          console.log('Total games:', gamesData.reduce((total: number, season: any) => total + season.games.length, 0))
+          console.log('Cache updated in localStorage as "cachedUserGames"')
+          console.log('=== END IMPORT CACHE DEBUG ===')
+        }
+      } catch (error) {
+        console.error('Error refreshing games cache:', error)
+        // Continue even if cache refresh fails
+      }
     } else {
       setMessage(data?.error || "Failed to import file.")
     }

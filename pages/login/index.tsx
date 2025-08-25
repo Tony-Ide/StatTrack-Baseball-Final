@@ -15,7 +15,40 @@ export default function LoginPage() {
       body: JSON.stringify({ email, password }),
       credentials: "include", // ensure cookies are sent/received
     })
+    
+    if (res.status === 403) {
+      // Email not verified - offer to resend verification
+      const data = await res.json()
+      setError(data.message)
+      return
+    }
+    
     if (res.ok) {
+      // Cache user games data in localStorage
+      try {
+        const cacheRes = await fetch("/api/cache-user-games", {
+          method: "POST",
+          credentials: "include",
+        })
+        if (cacheRes.ok) {
+          const gamesData = await cacheRes.json()
+          localStorage.setItem('cachedUserGames', JSON.stringify(gamesData))
+          
+          // Debug: Show cached data after login
+          console.log('=== LOGIN CACHE DEBUG ===')
+          console.log('User logged in:', email)
+          console.log('Cached games data:', gamesData)
+          console.log('Cache size:', JSON.stringify(gamesData).length, 'bytes')
+          console.log('Number of seasons:', gamesData.length)
+          console.log('Total games:', gamesData.reduce((total: number, season: any) => total + season.games.length, 0))
+          console.log('Cache stored in localStorage as "cachedUserGames"')
+          console.log('=== END LOGIN CACHE DEBUG ===')
+        }
+      } catch (error) {
+        console.error('Error caching games:', error)
+        // Continue with login even if caching fails
+      }
+      
       router.push("/dashboard")
       // Bypassing authcheck for now
       // const check = await fetch("/api/authcheck", { credentials: "include" })
@@ -26,16 +59,21 @@ export default function LoginPage() {
       // }
     } else {
       const data = await res.json()
-      setError(data.error || "Login failed")
+      setError(data.message || data.error || "Login failed")
     }
   }
 
   return (
     <Layout>
-      <AuthForm onAuth={handleAuth} mode="login" />
-      {error && <div className="text-red-600 text-center mt-2">{error}</div>}
-      <div className="text-center mt-4">
-        <a href="/register" className="text-blue-600 hover:underline text-sm">Don't have an account? Sign up</a>
+      <AuthForm onAuth={handleAuth} mode="login" error={error} />
+      
+      <div className="text-center mt-4 space-y-2">
+        <div>
+          <a href="/register" className="text-blue-600 hover:underline text-sm">Don't have an account? Sign up</a>
+        </div>
+        <div>
+          <a href="/forgot-password" className="text-blue-600 hover:underline text-sm">Forgot your password?</a>
+        </div>
       </div>
     </Layout>
   )

@@ -22,12 +22,26 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   try {
     const { data: user, error } = await supabase
       .from('users')
-      .select('user_id, email, password_hash, team_id')
+      .select('user_id, email, password_hash, team_id, email_verified')
       .eq('email', email)
       .single()
     if (error || !user) {
       return res.status(401).json({ error: true, message: 'Invalid email or password.' })
     }
+    
+    // Check if user still exists (in case they were deleted)
+    if (!user.user_id) {
+      return res.status(401).json({ error: true, message: 'Account not found. Please register again.' })
+    }
+    
+    // Check if email is verified
+    if (!user.email_verified) {
+      return res.status(403).json({ 
+        error: true, 
+        message: 'Please verify your email address before logging in. Check your inbox for a verification link.' 
+      })
+    }
+    
     const match = await bcrypt.compare(password, user.password_hash)
     if (!match) {
       return res.status(401).json({ error: true, message: 'Invalid email or password.' })

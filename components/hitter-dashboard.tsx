@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, Filter, TrendingUp, Target, Zap, RotateCcw } from "lucide-react"
 import { parseGameDate } from "@/lib/utils"
-import { ThemeProvider } from "@/components/theme-provider"
 import StatsTable from "@/components/stats-table"
 import GamesLogTable from "@/components/games-log-table"
 import SprayChart from "@/components/hitters-spray-chart"
@@ -144,42 +143,54 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
   });
 
   return (
-    <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-      <div className="container mx-auto p-6 space-y-6">
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">{hitter?.name || 'Hitter'}</h1>
-            <p className="text-gray-600">{hitter?.team_id || 'Team'}</p>
-          </div>
-          <div className="flex items-center space-x-2">
-            <Badge variant="secondary">{hitter?.side || 'Unknown'}</Badge>
-            <Badge variant="outline">{games.length} Games</Badge>
+    <div className="min-h-screen bg-white">
+      {/* Header */}
+      <div className="bg-white border-b border-orange-100">
+        <div className="container mx-auto px-6 py-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center space-x-4">
+              <div className="w-12 h-12 bg-gradient-to-r from-orange-400 to-orange-600 rounded-lg flex items-center justify-center">
+                <span className="text-white font-bold text-lg">{hitter?.number || '#'}</span>
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold text-gray-900">{hitter?.name || 'Hitter'}</h1>
+                <p className="text-orange-600">
+                  {hitter?.side || 'Unknown'} • {hitter?.team_id || 'Team'}
+                </p>
+              </div>
+            </div>
+            <div className="flex items-center space-x-4">
+              <Badge variant="outline" className="border-orange-300 text-orange-600 bg-white">
+                {games.length} Games
+              </Badge>
+            </div>
           </div>
         </div>
+      </div>
+
+      {/* Main Content */}
+      <div className="container mx-auto px-6 py-6">
 
 
 
-        {/* Main Content */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
-          <TabsList className="bg-white border border-blue-100">
-            <TabsTrigger value="overview" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+          <TabsList className="bg-white border border-orange-100">
+            <TabsTrigger value="overview" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">
               <TrendingUp className="w-4 h-4 mr-2" />
               Overview
             </TabsTrigger>
-            <TabsTrigger value="games-log" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <TabsTrigger value="games-log" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">
               <Calendar className="w-4 h-4 mr-2" />
               Games Log
             </TabsTrigger>
-            <TabsTrigger value="trends" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <TabsTrigger value="trends" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">
               <TrendingUp className="w-4 h-4 mr-2" />
               Trends
             </TabsTrigger>
-
-            <TabsTrigger value="spray" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <TabsTrigger value="spray" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">
               Spray Chart
             </TabsTrigger>
-            <TabsTrigger value="heatmaps" className="data-[state=active]:bg-blue-500 data-[state=active]:text-white">
+            <TabsTrigger value="heatmaps" className="data-[state=active]:bg-orange-500 data-[state=active]:text-white">
               <Target className="w-4 h-4 mr-2" />
               Heatmaps
             </TabsTrigger>
@@ -188,7 +199,7 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
             {/* Overview Filters */}
-              <Card className="bg-white border-blue-100">
+              <Card className="bg-white border-orange-100">
               <CardHeader>
                 <CardTitle className="text-gray-900">Filters</CardTitle>
               </CardHeader>
@@ -1069,6 +1080,6 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
           </TabsContent>
         </Tabs>
       </div>
-    </ThemeProvider>
+    </div>
   )
 } 
