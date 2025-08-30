@@ -12,6 +12,8 @@ export default function Layout({ children, showLogout, fullBleed }: LayoutProps)
 
   const handleLogout = async () => {
     await fetch("/api/logout", { method: "POST", credentials: "include" })
+    // Clear the cache from localStorage on logout
+    localStorage.removeItem('cachedUserGames')
     router.push("/login")
   }
 

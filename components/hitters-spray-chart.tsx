@@ -332,27 +332,48 @@ function HitTrajectory3D({ pitch, highlight = false }: { pitch: any, highlight?:
   const hangTime = Number(pitch.hitting_metrics.hang_time);
   if (!isFinite(hangTime) || hangTime <= 0) return null;
   
-  // Get contact position from hitting metrics
+  // Get pitch trajectory end point
+  const pitchTraj = getPitchTrajectoryPointsFromSQL(pitch);
+  if (!pitchTraj) return null;
+  
+  // Find the last point of the pitch trajectory (where it ends)
+  const lastPitchIndex = pitchTraj.x.length - 1;
+  const pitchEndX = pitchTraj.x[lastPitchIndex];
+  const pitchEndY = pitchTraj.y[lastPitchIndex];
+  const pitchEndZ = pitchTraj.z[lastPitchIndex];
+  
+  // Apply pitch transform to get the 3D position where pitch trajectory ends
+  const [pitchEndTx, pitchEndTy, pitchEndTz] = applyPitchTransform([pitchEndX, pitchEndY, pitchEndZ]);
+  
+  // Get contact position from hitting metrics (original hit trajectory start)
   const contactX = Number(pitch.hitting_metrics.contact_position_x);
   const contactY = Number(pitch.hitting_metrics.contact_position_y);
   const contactZ = Number(pitch.hitting_metrics.contact_position_z);
   
   if (!isFinite(contactX) || !isFinite(contactY) || !isFinite(contactZ)) return null;
   
+  // Apply transform to get original contact position
+  const [contactTx, contactTy, contactTz] = applyTransform([contactX, contactY, contactZ]);
+  
+  // Calculate the shift needed to move hit trajectory from contact position to pitch end position
+  const shiftX = pitchEndTx - contactTx;
+  const shiftY = pitchEndTy - contactTy;
+  const shiftZ = pitchEndTz - contactTz;
+  
   // Sample points along the trajectory
   const N = 100;
   const points: [number, number, number][] = [];
   
-  // Start at contact position
-  const [contactTx, contactTy, contactTz] = applyTransform([contactX, contactY, contactZ]);
-  points.push([contactTx, contactTy, contactTz]);
+  // Start at pitch trajectory end position
+  points.push([pitchEndTx, pitchEndTy, pitchEndTz]);
   
-  // Add trajectory points from contact to landing
+  // Add trajectory points from contact to landing, but shifted to start from pitch end
   for (let i = 1; i <= N; ++i) {
     const t = (hangTime * i) / N;
     const landing = getLandingPoint(pitch.hit_trajectory, t);
     const [tx, ty, tz] = applyTransform(landing);
-    points.push([tx, ty, tz]);
+    // Apply the shift to align with pitch trajectory end
+    points.push([tx + shiftX, ty + shiftY, tz + shiftZ]);
   }
   
   return (

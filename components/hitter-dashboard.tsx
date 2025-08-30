@@ -686,6 +686,9 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
                       
+                      // Filter by pitcher throws
+                      if (heatmapSelectedPitcherThrows !== "all" && pitch.pitcher?.throws !== heatmapSelectedPitcherThrows) return false;
+                      
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
                       
@@ -737,6 +740,9 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
                         const pitchDate = parseGameDate(pitch.date);
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
+                      
+                      // Filter by pitcher throws
+                      if (heatmapSelectedPitcherThrows !== "all" && pitch.pitcher?.throws !== heatmapSelectedPitcherThrows) return false;
                       
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
@@ -794,6 +800,9 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
                       
+                      // Filter by pitcher throws
+                      if (heatmapSelectedPitcherThrows !== "all" && pitch.pitcher?.throws !== heatmapSelectedPitcherThrows) return false;
+                      
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
                       
@@ -846,6 +855,9 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
                       
+                      // Filter by pitcher throws
+                      if (heatmapSelectedPitcherThrows !== "all" && pitch.pitcher?.throws !== heatmapSelectedPitcherThrows) return false;
+                      
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
                       
@@ -897,6 +909,9 @@ export default function HitterDashboard({ hitter, games = [], pitchTypes }: Hitt
                         const pitchDate = parseGameDate(pitch.date);
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
+                      
+                      // Filter by pitcher throws
+                      if (heatmapSelectedPitcherThrows !== "all" && pitch.pitcher?.throws !== heatmapSelectedPitcherThrows) return false;
                       
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;

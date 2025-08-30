@@ -22,13 +22,22 @@ interface ZoneAnalysisProps {
 }
 
 // Reusable Zone Chart Component
-function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitches }: { 
+function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitches, zoneFilters }: { 
   title: string; 
   games?: any[]; 
   pitcherId?: string;
   hitterId?: string;
   playerType?: 'pitcher' | 'hitter';
   filteredPitches?: any[];
+  zoneFilters?: {
+    season: string
+    month: string
+    batterSide: string
+    pitchType: string
+    outs: string
+    balls: string
+    strikes: string
+  }
 }) {
   // Strike zone bounds (expanded by 0.17 in all directions)
   const zoneBounds = {
@@ -202,12 +211,46 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
       playerPitches = allPitches.filter(pitch => pitch.pitcher_id === pitcherId)
     }
     
+    // Apply zone filters to playerPitches for all metrics except Batting Average
+    const filteredPlayerPitches = playerPitches.filter(pitch => {
+      // Filter by month (if zoneFilters has month)
+      if (zoneFilters?.month && zoneFilters.month !== "all") {
+        const pitchDate = new Date(pitch.date)
+        if (pitchDate.getMonth() + 1 !== parseInt(zoneFilters.month)) return false
+      }
+      
+      // Filter by batter/pitcher side
+      if (zoneFilters?.batterSide && zoneFilters.batterSide !== "all") {
+        if (playerType === 'hitter') {
+          // For hitters, filter by pitcher side (throws)
+          if (pitch.pitcher?.throws !== zoneFilters.batterSide) return false
+        } else {
+          // For pitchers, filter by batter side
+          if (pitch.batter?.side !== zoneFilters.batterSide) return false
+        }
+      }
+      
+      // Filter by pitch type
+      if (zoneFilters?.pitchType && zoneFilters.pitchType !== "all" && pitch.auto_pitch_type !== zoneFilters.pitchType) return false
+      
+      // Filter by outs
+      if (zoneFilters?.outs && zoneFilters.outs !== "all" && pitch.outs !== parseInt(zoneFilters.outs)) return false
+      
+      // Filter by balls
+      if (zoneFilters?.balls && zoneFilters.balls !== "all" && pitch.balls !== parseInt(zoneFilters.balls)) return false
+      
+      // Filter by strikes
+      if (zoneFilters?.strikes && zoneFilters.strikes !== "all" && pitch.strikes !== parseInt(zoneFilters.strikes)) return false
+      
+      return true
+    })
+    
     const zoneStats: { [key: string]: any } = {}
 
     // Calculate stats for inner zones
     innerZones.forEach(zone => {
-      const zonePitches = playerPitches.filter((pitch: any) => isPitchInZone(pitch, zone))
-      const totalPitches = playerPitches.length
+      const zonePitches = filteredPlayerPitches.filter((pitch: any) => isPitchInZone(pitch, zone))
+      const totalPitches = filteredPlayerPitches.length
       
       if (title === "Location%") {
         zoneStats[zone.id] = totalPitches > 0 ? ((zonePitches.length / totalPitches) * 100).toFixed(1) : '0.0'
@@ -218,7 +261,11 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
         const whiffs = zonePitches.filter((pitch: any) => pitch.pitch_call === 'StrikeSwinging').length
         zoneStats[zone.id] = swings > 0 ? ((whiffs / swings) * 100).toFixed(1) : '0.0'
       } else if (title === "Batting Average") {
+        // For batting average, we need to get final pitches from plate appearances
+        // Use the same approach as stats-table: get all final pitches, then apply filters
         const finalPitches = new Map()
+        
+        // Get all final pitches from all games first
         games?.forEach((season: any) => {
           season.games?.forEach((game: any) => {
             game.innings?.forEach((inning: any) => {
@@ -232,27 +279,61 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
                 }
                 if (paPitches.length > 0) {
                   const finalPitch = paPitches[paPitches.length - 1]
-                  if (isPitchInZone(finalPitch, zone)) {
-                    const paKey = `${game.game_id}-${inning.inning}-${inning.top_bottom}-${pa.pa_of_inning}`
-                    finalPitches.set(paKey, finalPitch)
-                  }
+                  const paKey = `${game.game_id}-${inning.inning}-${inning.top_bottom}-${pa.pa_of_inning}`
+                  finalPitches.set(paKey, finalPitch)
                 }
               })
             })
           })
         })
         
-        const finalPitchArray = Array.from(finalPitches.values())
-        const hits = finalPitchArray.filter(pitch => 
+        // Now apply the same filters that are used in the zone filters
+        const filteredFinalPitches = Array.from(finalPitches.values()).filter(pitch => {
+          // Filter by month (if zoneFilters has month)
+          if (zoneFilters?.month && zoneFilters.month !== "all") {
+            const pitchDate = new Date(pitch.date)
+            if (pitchDate.getMonth() + 1 !== parseInt(zoneFilters.month)) return false
+          }
+          
+          // Filter by batter/pitcher side
+          if (zoneFilters?.batterSide && zoneFilters.batterSide !== "all") {
+            if (playerType === 'hitter') {
+              // For hitters, filter by pitcher side (throws)
+              if (pitch.pitcher?.throws !== zoneFilters.batterSide) return false
+            } else {
+              // For pitchers, filter by batter side
+              if (pitch.batter?.side !== zoneFilters.batterSide) return false
+            }
+          }
+          
+          // Filter by pitch type
+          if (zoneFilters?.pitchType && zoneFilters.pitchType !== "all" && pitch.auto_pitch_type !== zoneFilters.pitchType) return false
+          
+          // Filter by outs
+          if (zoneFilters?.outs && zoneFilters.outs !== "all" && pitch.outs !== parseInt(zoneFilters.outs)) return false
+          
+          // Filter by balls
+          if (zoneFilters?.balls && zoneFilters.balls !== "all" && pitch.balls !== parseInt(zoneFilters.balls)) return false
+          
+          // Filter by strikes
+          if (zoneFilters?.strikes && zoneFilters.strikes !== "all" && pitch.strikes !== parseInt(zoneFilters.strikes)) return false
+          
+          return true
+        })
+        
+        // Now filter by zone and calculate batting average
+        const zoneFinalPitches = filteredFinalPitches.filter(pitch => isPitchInZone(pitch, zone))
+        
+        const hits = zoneFinalPitches.filter(pitch => 
           ['Single', 'Double', 'Triple', 'HomeRun'].includes(pitch.play_result)
         ).length
-        const walks = finalPitchArray.filter(pitch => pitch.kor_bb === 'Walk').length
-        const hitByPitch = finalPitchArray.filter(pitch => pitch.pitch_call === 'HitByPitch').length
-        const sacrifices = finalPitchArray.filter(pitch => 
+        const walks = zoneFinalPitches.filter(pitch => pitch.kor_bb === 'Walk').length
+        const hitByPitch = zoneFinalPitches.filter(pitch => pitch.pitch_call === 'HitByPitch').length
+        const sacrifices = zoneFinalPitches.filter(pitch => 
           pitch.play_result === 'Sacrifice' || pitch.play_result === 'Sacrifice Fly'
         ).length
         
-        const atBats = finalPitchArray.length - walks - hitByPitch - sacrifices
+        const atBats = zoneFinalPitches.length - walks - hitByPitch - sacrifices
         zoneStats[zone.id] = atBats > 0 ? (hits / atBats).toFixed(3) : '0.000'
       } else if (title === "GB%" || title === "FB%" || title === "LD%") {
         const groundBalls = zonePitches.filter(pitch => 
@@ -279,8 +360,8 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
 
     // Calculate stats for outside zones
     outsideZones.forEach(zone => {
-      const zonePitches = playerPitches.filter((pitch: any) => isPitchInZone(pitch, zone))
-      const totalPitches = playerPitches.length
+      const zonePitches = filteredPlayerPitches.filter((pitch: any) => isPitchInZone(pitch, zone))
+      const totalPitches = filteredPlayerPitches.length
       
       if (title === "Location%") {
         zoneStats[zone.id] = totalPitches > 0 ? ((zonePitches.length / totalPitches) * 100).toFixed(1) : '0.0'
@@ -291,7 +372,11 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
         const whiffs = zonePitches.filter((pitch: any) => pitch.pitch_call === 'StrikeSwinging').length
         zoneStats[zone.id] = swings > 0 ? ((whiffs / swings) * 100).toFixed(1) : '0.0'
       } else if (title === "Batting Average") {
+        // For batting average, we need to get final pitches from plate appearances
+        // Use the same approach as stats-table: get all final pitches, then apply filters
         const finalPitches = new Map()
+        
+        // Get all final pitches from all games first
         games?.forEach((season: any) => {
           season.games?.forEach((game: any) => {
             game.innings?.forEach((inning: any) => {
@@ -305,27 +390,61 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
                 }
                 if (paPitches.length > 0) {
                   const finalPitch = paPitches[paPitches.length - 1]
-                  if (isPitchInZone(finalPitch, zone)) {
-                    const paKey = `${game.game_id}-${inning.inning}-${inning.top_bottom}-${pa.pa_of_inning}`
-                    finalPitches.set(paKey, finalPitch)
-                  }
+                  const paKey = `${game.game_id}-${inning.inning}-${inning.top_bottom}-${pa.pa_of_inning}`
+                  finalPitches.set(paKey, finalPitch)
                 }
               })
             })
           })
         })
         
-        const finalPitchArray = Array.from(finalPitches.values())
-        const hits = finalPitchArray.filter(pitch => 
+        // Now apply the same filters that are used in the zone filters
+        const filteredFinalPitches = Array.from(finalPitches.values()).filter(pitch => {
+          // Filter by month (if zoneFilters has month)
+          if (zoneFilters?.month && zoneFilters.month !== "all") {
+            const pitchDate = new Date(pitch.date)
+            if (pitchDate.getMonth() + 1 !== parseInt(zoneFilters.month)) return false
+          }
+          
+          // Filter by batter/pitcher side
+          if (zoneFilters?.batterSide && zoneFilters.batterSide !== "all") {
+            if (playerType === 'hitter') {
+              // For hitters, filter by pitcher side (throws)
+              if (pitch.pitcher?.throws !== zoneFilters.batterSide) return false
+            } else {
+              // For pitchers, filter by batter side
+              if (pitch.batter?.side !== zoneFilters.batterSide) return false
+            }
+          }
+          
+          // Filter by pitch type
+          if (zoneFilters?.pitchType && zoneFilters.pitchType !== "all" && pitch.auto_pitch_type !== zoneFilters.pitchType) return false
+          
+          // Filter by outs
+          if (zoneFilters?.outs && zoneFilters.outs !== "all" && pitch.outs !== parseInt(zoneFilters.outs)) return false
+          
+          // Filter by balls
+          if (zoneFilters?.balls && zoneFilters.balls !== "all" && pitch.balls !== parseInt(zoneFilters.balls)) return false
+          
+          // Filter by strikes
+          if (zoneFilters?.strikes && zoneFilters.strikes !== "all" && pitch.strikes !== parseInt(zoneFilters.strikes)) return false
+          
+          return true
+        })
+        
+        // Now filter by zone and calculate batting average
+        const zoneFinalPitches = filteredFinalPitches.filter(pitch => isPitchInZone(pitch, zone))
+        
+        const hits = zoneFinalPitches.filter(pitch => 
           ['Single', 'Double', 'Triple', 'HomeRun'].includes(pitch.play_result)
         ).length
-        const walks = finalPitchArray.filter(pitch => pitch.kor_bb === 'Walk').length
-        const hitByPitch = finalPitchArray.filter(pitch => pitch.pitch_call === 'HitByPitch').length
-        const sacrifices = finalPitchArray.filter(pitch => 
+        const walks = zoneFinalPitches.filter(pitch => pitch.kor_bb === 'Walk').length
+        const hitByPitch = zoneFinalPitches.filter(pitch => pitch.pitch_call === 'HitByPitch').length
+        const sacrifices = zoneFinalPitches.filter(pitch => 
           pitch.play_result === 'Sacrifice' || pitch.play_result === 'Sacrifice Fly'
         ).length
         
-        const atBats = finalPitchArray.length - walks - hitByPitch - sacrifices
+        const atBats = zoneFinalPitches.length - walks - hitByPitch - sacrifices
         zoneStats[zone.id] = atBats > 0 ? (hits / atBats).toFixed(3) : '0.000'
       } else if (title === "GB%" || title === "FB%" || title === "LD%") {
         const groundBalls = zonePitches.filter(pitch => 
@@ -391,14 +510,14 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
             {innerZones.map((zone) => {
               const topLeft = toSVG(zone.bounds.x.min, zone.bounds.y.max, 200, 250)
               const bottomRight = toSVG(zone.bounds.x.max, zone.bounds.y.min, 200, 250)
-              const width = bottomRight.x - topLeft.x
-              const height = topLeft.y - bottomRight.y
+              const width = Math.abs(bottomRight.x - topLeft.x)
+              const height = Math.abs(topLeft.y - bottomRight.y)
 
               return (
                 <rect
                   key={zone.id}
-                  x={topLeft.x}
-                  y={bottomRight.y}
+                  x={Math.min(topLeft.x, bottomRight.x)}
+                  y={Math.min(topLeft.y, bottomRight.y)}
                   width={width}
                   height={height}
                   fill="#e5f3e5"
@@ -469,16 +588,25 @@ function ZoneChart({ title, games, pitcherId, hitterId, playerType, filteredPitc
             })}
 
             {/* Strike zone outline */}
-            <rect
-              x={toSVG(zoneBounds.x.min, zoneBounds.y.max, 200, 250).x}
-              y={toSVG(zoneBounds.x.min, zoneBounds.y.max, 200, 250).y}
-              width={toSVG(zoneBounds.x.max, zoneBounds.y.max, 200, 250).x - toSVG(zoneBounds.x.min, zoneBounds.y.max, 200, 250).x}
-              height={toSVG(zoneBounds.x.min, zoneBounds.y.max, 200, 250).y - toSVG(zoneBounds.x.min, zoneBounds.y.min, 200, 250).y}
-              fill="none"
-              stroke="#6b7280"
-              strokeWidth="1"
-              strokeDasharray="3,3"
-            />
+            {(() => {
+              const topLeft = toSVG(zoneBounds.x.min, zoneBounds.y.max, 200, 250)
+              const bottomRight = toSVG(zoneBounds.x.max, zoneBounds.y.min, 200, 250)
+              const width = Math.abs(bottomRight.x - topLeft.x)
+              const height = Math.abs(topLeft.y - bottomRight.y)
+              
+              return (
+                <rect
+                  x={Math.min(topLeft.x, bottomRight.x)}
+                  y={Math.min(topLeft.y, bottomRight.y)}
+                  width={width}
+                  height={height}
+                  fill="none"
+                  stroke="#6b7280"
+                  strokeWidth="1"
+                  strokeDasharray="3,3"
+                />
+              )
+            })()}
 
             {/* Inner zone dividing lines */}
             {/* Vertical lines */}
@@ -541,14 +669,14 @@ export default function ZoneAnalysis({ games, pitcherId, hitterId, playerType, f
       {/* Zone Statistics Grid */}
       <div className="grid grid-cols-3 gap-4">
         {/* Row 1 */}
-        <ZoneChart title="Location%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} />
-        <ZoneChart title="Whiff%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} />
-        <ZoneChart title="Batting Average" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} />
+        <ZoneChart title="Location%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} zoneFilters={zoneFilters} />
+        <ZoneChart title="Whiff%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} zoneFilters={zoneFilters} />
+        <ZoneChart title="Batting Average" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} zoneFilters={zoneFilters} />
         
         {/* Row 2 */}
-        <ZoneChart title="GB%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} />
-        <ZoneChart title="FB%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} />
-        <ZoneChart title="LD%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} />
+        <ZoneChart title="GB%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} zoneFilters={zoneFilters} />
+        <ZoneChart title="FB%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} zoneFilters={zoneFilters} />
+        <ZoneChart title="LD%" games={games} pitcherId={pitcherId} hitterId={hitterId} playerType={playerType} filteredPitches={filteredPitches} zoneFilters={zoneFilters} />
       </div>
 
       {/* Legend */}

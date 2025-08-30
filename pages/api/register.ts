@@ -2,6 +2,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { supabase } from '@/lib/supabase'
 import bcrypt from 'bcryptjs'
 import { randomBytes, createHash } from 'crypto'
+import { sendEmail } from '@/lib/email'
 
 const TTL_MIN = 10
 
@@ -14,10 +15,16 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Missing required fields' })
   }
 
-  // Validate .edu email domain
+  // Basic email format validation
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
+  if (!emailRegex.test(email)) {
+    return res.status(400).json({ error: 'Please enter a valid email address' })
+  }
+
+  // Block .edu email addresses
   const emailDomain = email.split('@')[1]?.toLowerCase()
-  if (!emailDomain || !emailDomain.endsWith('.edu')) {
-    return res.status(400).json({ error: 'Only .edu email addresses are allowed' })
+  if (emailDomain && emailDomain.endsWith('.edu')) {
+    return res.status(400).json({ error: '.edu email addresses are not allowed for registration' })
   }
   
   try {
@@ -60,31 +67,66 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
     const verifyUrl = `${baseUrl}/verify?token=${raw}`
     
-    // TODO: Replace with your actual email service
-    // For now, we'll log the verification URL
-    console.log(`[REGISTRATION] New user registered: ${email}`)
-    console.log(`[REGISTRATION] Verification URL: ${verifyUrl}`)
-    console.log(`[REGISTRATION] Token expires at: ${expiresAt.toISOString()}`)
-    
-    // In production, you would send an actual email here
-    // await sendEmail({
-    //   to: email,
-    //   subject: 'Welcome to StatTrack Baseball - Verify your email',
-    //   html: `
-    //     <h2>Welcome to StatTrack Baseball!</h2>
-    //     <p>Thank you for registering. Please click the link below to verify your email address:</p>
-    //     <a href="${verifyUrl}" style="display: inline-block; padding: 12px 24px; background-color: #f97316; color: white; text-decoration: none; border-radius: 6px;">Verify Email</a>
-    //     <p>This link expires in ${TTL_MIN} minutes.</p>
-    //     <p>If you didn't create an account, you can safely ignore this email.</p>
-    //   `,
-    //   text: `Welcome to StatTrack Baseball! Verify your email: ${verifyUrl} (expires in ${TTL_MIN} minutes)`
-    // })
+    // Send welcome email with verification link
+    try {
+      await sendEmail({
+        to: email,
+        subject: 'Welcome to StatTrack Baseball - Verify your email',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+            <div style="background-color: #f97316; color: white; padding: 20px; text-align: center; border-radius: 8px 8px 0 0;">
+              <h1 style="margin: 0; font-size: 24px;">StatTrack Baseball</h1>
+            </div>
+            <div style="background-color: #f9fafb; padding: 30px; border-radius: 0 0 8px 8px; border: 1px solid #e5e7eb;">
+              <h2 style="color: #374151; margin-top: 0;">Welcome to StatTrack Baseball!</h2>
+              <p style="color: #6b7280; line-height: 1.6;">Thank you for registering! We're excited to have you join our baseball analytics platform. To complete your registration, please verify your email address by clicking the button below:</p>
+              
+              <div style="text-align: center; margin: 30px 0;">
+                <a href="${verifyUrl}" style="display: inline-block; padding: 14px 28px; background-color: #f97316; color: white; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px;">Verify Email Address</a>
+              </div>
+              
+              <p style="color: #6b7280; font-size: 14px; margin-top: 30px;">
+                <strong>Important:</strong> This verification link expires in ${TTL_MIN} minutes for security reasons.
+              </p>
+              
+              <p style="color: #6b7280; font-size: 14px;">
+                If you didn't create an account with StatTrack Baseball, you can safely ignore this email.
+              </p>
+              
+              <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 30px 0;">
+              <p style="color: #9ca3af; font-size: 12px; text-align: center;">
+                If the button doesn't work, copy and paste this link into your browser:<br>
+                <a href="${verifyUrl}" style="color: #f97316;">${verifyUrl}</a>
+              </p>
+            </div>
+          </div>
+        `,
+        text: `Welcome to StatTrack Baseball!
+
+Thank you for registering! We're excited to have you join our baseball analytics platform.
+
+To complete your registration, please verify your email address by clicking the link below:
+
+${verifyUrl}
+
+This link expires in ${TTL_MIN} minutes.
+
+If you didn't create an account with StatTrack Baseball, you can safely ignore this email.
+
+Best regards,
+The StatTrack Baseball Team`
+      })
+
+      console.log(`[REGISTRATION] Welcome email sent to ${email}`)
+      
+    } catch (emailError) {
+      console.error('Error sending welcome email:', emailError)
+      return res.status(500).json({ error: 'Registration successful but failed to send verification email. Please contact support.' })
+    }
     
     return res.status(201).json({ 
       success: true, 
-      message: 'Registration successful. Please check your email to verify your account.',
-      // Remove this in production - only for development
-      debugUrl: verifyUrl
+      message: 'Registration successful. Please check your email to verify your account.'
     })
     
   } catch (err) {

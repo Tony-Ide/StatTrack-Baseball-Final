@@ -110,9 +110,9 @@ function VelocityKDE({ pitchTypes, pitchesByType, pitchColors, velocityRange }: 
 
         // Build SVG path (viewBox 1000x100)
         const pathTop = xs.map((x, i) => {
-          const xPx = ((x - min) / span) * 1000;
-          const yPx = 100 - yNorm[i] * 100; // invert for SVG
-          return `${i === 0 ? "M" : "L"} ${xPx.toFixed(2)} ${yPx.toFixed(2)}`;
+            const xPx = ((x - min) / span) * 1000;
+            const yPx = 100 - yNorm[i] * 100; // invert for SVG
+            return `${i === 0 ? "M" : "L"} ${xPx.toFixed(2)} ${yPx.toFixed(2)}`;
         }).join(" ");
 
         const path = `${pathTop} L 1000 100 L 0 100 Z`;
@@ -498,7 +498,7 @@ export default function PrintPitcherReport({
               {pitcher?.name},{" "}
               {pitcher?.throws === "Right" ? "RHP" : pitcher?.throws === "Left" ? "LHP" : ""}
             </h1>
-            
+
             {/* Game Dates */}
             <div className="mb-4 text-center text-sm text-gray-600 print:mb-3 print:text-xs">
               <p className="font-medium">Selected Games:</p>
@@ -583,16 +583,14 @@ export default function PrintPitcherReport({
             </div>
           </div>
 
-          {/* Graphs Layout: Left side (2 rows) + Right side (1 large graph) */}
-          <div className="grid grid-cols-2 gap-6 print:gap-4">
-            {/* Left Column: Velocity Distribution (top) + Spin Axis (bottom) */}
-            <div className="flex flex-col space-y-6 print:space-y-4">
-              {/* Velocity Distribution */}
-              <div className="avoid-break h-auto print:h-auto">
-                <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2">
-                  <h2 className="mb-4 text-lg font-bold print:mb-2 print:text-sm">
-                    Pitch Velocity Distribution
-                  </h2>
+          {/* Graphs Layout: 2x2 Grid with equal-sized graphs */}
+          <div className="grid grid-cols-2 gap-6 print:gap-4 h-[800px] print:h-[600px]">
+            {/* Top Left: Velocity Distribution */}
+            <div className="avoid-break h-full">
+              <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2">
+                <h2 className="mb-4 text-lg font-bold print:mb-2 print:text-sm">
+                  Pitch Velocity Distribution
+                </h2>
 
                   {pitchTypes.length === 0 ? (
                     <div className="flex h-full items-center justify-center text-sm text-gray-500">
@@ -606,17 +604,17 @@ export default function PrintPitcherReport({
                       velocityRange={velocityRange}
                     />
                   )}
-                </div>
               </div>
+            </div>
 
-              {/* Spin Axis Plot */}
-              <div className="avoid-break h-80 print:h-72">
-                <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2 relative">
-                  <h2 className="absolute left-4 top-4 z-10 text-lg font-bold print:left-2 print:top-2 print:text-sm">Spin Axis Plot</h2>
-                  <div className="absolute inset-0 p-4 print:p-2 flex items-center justify-center">
-                    <div className="relative h-[100%] aspect-square w-auto max-w-[100%] overflow-hidden">
+            {/* Top Right: Spin Axis Plot */}
+            <div className="avoid-break h-full">
+              <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2 relative">
+                <h2 className="absolute left-4 top-4 z-10 text-lg font-bold print:left-2 print:top-2 print:text-sm">Spin Axis Plot</h2>
+                <div className="absolute inset-0 p-4 print:p-2 flex items-center justify-center">
+                  <div className="relative h-[100%] aspect-square w-auto max-w-[100%] overflow-hidden">
                       {/* circle with internal padding */}
-                      <div className="absolute rounded-full border-2 border-gray-300" style={{ left: '6%', top: '6%', right: '6%', bottom: '6%' }} />
+                    <div className="absolute rounded-full border-2 border-gray-300" style={{ left: '6%', top: '6%', right: '6%', bottom: '6%' }} />
                       {/* angle markers (every 30°) */}
                       {Array.from({ length: 12 }, (_, i) => {
                         const angle = (i * 30 + 180) % 360;
@@ -664,106 +662,237 @@ export default function PrintPitcherReport({
                       })}
                       {/* center */}
                       <div className="absolute left-1/2 top-1/2 h-2 w-2 -translate-x-1 -translate-y-1 rounded-full bg-gray-600" />
-                    </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Right Column: Pitch Movement Plot (takes up both rows) */}
-            <div className="avoid-break h-full print:h-auto">
+            {/* Bottom Left: Pitch Breaks Plot (Square) */}
+            <div className="avoid-break h-full">
               <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2">
                 <h2 className="mb-4 text-lg font-bold print:mb-2 print:text-sm">Pitch Breaks</h2>
                 <div className="relative w-full rounded border border-gray-300 overflow-hidden" style={{ aspectRatio: "1" }}>
-                  {/* normal graphing grid: light lines every 10% */}
-                  {Array.from({ length: 9 }, (_, i) => {
-                    const pct = (i + 1) * 10; // 10..90
-                    return (
-                      <React.Fragment key={`grid-${pct}`}> 
-                        {/* vertical line */}
+                    {/* normal graphing grid: light lines every 10% */}
+                    {Array.from({ length: 9 }, (_, i) => {
+                      const pct = (i + 1) * 10; // 10..90
+                      return (
+                        <React.Fragment key={`grid-${pct}`}>
+                          {/* vertical line */}
                         <div className="absolute top-0 bottom-0 w-px bg-gray-200" style={{ left: `${pct}%` }} />
-                        {/* horizontal line */}
+                          {/* horizontal line */}
                         <div className="absolute left-0 right-0 h-px bg-gray-200" style={{ top: `${pct}%` }} />
-                      </React.Fragment>
-                    );
-                  })}
-                  {/* axes */}
-                  <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-px bg-gray-400" />
-                  <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-px bg-gray-400" />
+                        </React.Fragment>
+                      );
+                    })}
+                    {/* axes */}
+                    <div className="absolute left-0 right-0 top-1/2 h-px -translate-y-px bg-gray-400" />
+                    <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-px bg-gray-400" />
 
-                  {/* points */}
-                  {validPitches.map((p: any, idx: number) => {
-                    const pm = p.pitching_metrics;
-                    // Range ±25 in, mapped to 0..100%
-                    let x = ((pm.horz_break + 25) / 50) * 100;
-                    let y = ((pm.induced_vert_break + 25) / 50) * 100;
+                    {/* points */}
+                    {validPitches.map((p: any, idx: number) => {
+                      const pm = p.pitching_metrics;
+                      // Range ±25 in, mapped to 0..100%
+                      let x = ((pm.horz_break + 25) / 50) * 100;
+                      let y = ((pm.induced_vert_break + 25) / 50) * 100;
+                      x = Math.max(1, Math.min(99, x));
+                      y = Math.max(1, Math.min(99, y));
+                      const c = pitchColors[p.auto_pitch_type] ?? "#000";
+                      return (
+                        <div
+                          key={idx}
+                          className="absolute h-2 w-2 -translate-x-1 -translate-y-1 rounded-full border border-white"
+                          style={{ left: `${x}%`, top: `${100 - y}%`, backgroundColor: c }}
+                        />
+                      );
+                    })}
+
+                    {/* axis titles at actual axes (y=center, x=center); y not rotated */}
+                    <div
+                      className="absolute text-xs text-gray-600"
+                      style={{ left: "50%", bottom: "10px", transform: "translateX(-50%)" }}
+                    >
+                      Horizontal Break (in)
+                    </div>
+                    <div
+                      className="absolute text-xs text-gray-600"
+                      style={{ left: "-50px", top: "50%", transform: "translateY(-50%) rotate(-90deg)" }}
+                    >
+                      Induced Vertical Break (in)
+                    </div>
+
+                    {/* ticks aligned to grid lines, drawn on the central axes; skip labeling 0 on both axes */}
+                    {Array.from({ length: 11 }, (_, i) => {
+                      const v = -25 + i * 5;
+                      const xPct = (i / 10) * 100;
+                      const yPct = (i / 10) * 100;
+                      const isCenter = i === 5;
+                      // Helpers to avoid label overflow at left/right extremes
+                      const xLabelStyle =
+                        i === 0
+                          ? { left: `0%`, top: `calc(50% + 6px)`, transform: "translateX(0)" }
+                          : i === 10
+                          ? { left: `100%`, top: `calc(50% + 6px)`, transform: "translateX(-100%)" }
+                          : { left: `${xPct}%`, top: `calc(50% + 6px)`, transform: "translateX(-50%)" };
+                      return (
+                        <React.Fragment key={`tick-${i}`}>
+                          {/* x-axis ticks on center horizontal axis */}
+                          <div
+                            className="absolute w-[2px] h-3 bg-gray-400"
+                            style={{ left: `${xPct}%`, top: "calc(50% - 1.5px)" }}
+                          />
+                          {!(isCenter || i === 0 || i === 10) && (
+                            <div className="absolute text-[10px] text-gray-600" style={xLabelStyle as any}>
+                              {v}
+                            </div>
+                          )}
+                          {/* y-axis ticks on center vertical axis */}
+                          <div
+                            className="absolute h-[2px] w-3 bg-gray-400"
+                            style={{ left: "calc(50% - 1.5px)", top: `${100 - yPct}%` }}
+                          />
+                          {!(isCenter || i === 0 || i === 10) && (
+                            <div
+                              className="absolute text-[10px] text-gray-600"
+                              style={{ left: "calc(50% + 6px)", top: `${100 - yPct}%`, transform: "translateY(-50%)" }}
+                            >
+                              {v}
+                            </div>
+                          )}
+                        </React.Fragment>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Right: Release Position Plot */}
+            <div className="avoid-break h-full">
+              <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2">
+                <h2 className="mb-4 text-lg font-bold print:mb-2 print:text-sm">Release Position</h2>
+                                <div className="relative w-full rounded border border-gray-300 overflow-hidden" style={{ aspectRatio: "1.25" }}>
+                  {/* Y-axis grid lines: align with 0-8 labels - BACKGROUND */}
+                  {Array.from({ length: 9 }, (_, i) => {
+                    const yPct = (i / 8) * 100; // 0, 12.5, 25, 37.5, 50, 62.5, 75, 87.5, 100
+                        return (
+                          <div
+                        key={`y-grid-${i}`}
+                        className="absolute left-0 right-0 h-px bg-gray-200"
+                        style={{ top: `${100 - yPct}%` }}
+                          />
+                        );
+                      })}
+                    
+                    {/* X-axis grid lines: align with -5 to 5 labels - BACKGROUND */}
+                    {Array.from({ length: 11 }, (_, i) => {
+                      const xPct = (i / 10) * 100; // 0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100
+                        return (
+                          <div
+                        key={`x-grid-${i}`}
+                              className="absolute top-0 bottom-0 w-px bg-gray-200"
+                              style={{ left: `${xPct}%` }}
+                          />
+                        );
+                      })}
+
+                  {/* Pitching mound - MIDDLE LAYER */}
+                  <div
+                    className="absolute"
+                    style={{
+                      left: "0%",
+                      right: "0%",
+                      bottom: "0%",
+                      height: "9.7%", // 0.75/8 = 9.375% of the height
+                      backgroundColor: "#8B4513",
+                      borderTop: "2px solid #654321",
+                      borderRadius: "150% 150% 0 0 / 100% 100% 0 0" // Curved top
+                    }}
+                  />
+
+                  {/* Pitching rubber - MIDDLE LAYER */}
+                  <div
+                    className="absolute"
+                    style={{
+                      left: "50%",
+                      bottom: "8.5%", // Positioned right under y=1 (1/8 = 12.5%, so 1.5% puts it just below y=1)
+                      width: "15%", // -0.75 to +0.75 ft = 1.5ft wide, mapped to 15% of graph width
+                      height: "2.125%", // 0.17ft high (0.92-0.75), mapped to 2.125% of graph height
+                      backgroundColor: "white",
+                      border: "0.75px solid black",
+                      transform: "translateX(-50%)" // Center horizontally
+                    }}
+                  />
+
+                    {/* points - TOP LAYER */}
+                      {validPitches.map((p: any, idx: number) => {
+                        const pm = p.pitching_metrics;
+                    // Range X: -5 to 5, mapped to 0..100%
+                    // Range Y: 0 to 8, mapped to 0..100%
+                    let x = ((pm.rel_side + 5) / 10) * 100;
+                    let y = (pm.rel_height / 8) * 100;
                     x = Math.max(1, Math.min(99, x));
                     y = Math.max(1, Math.min(99, y));
-                    const c = pitchColors[p.auto_pitch_type] ?? "#000";
+                        const c = pitchColors[p.auto_pitch_type] ?? "#000";
+                        return (
+                          <div
+                            key={idx}
+                            className="absolute h-2 w-2 -translate-x-1 -translate-y-1 rounded-full border border-white"
+                        style={{ left: `${x}%`, top: `${100 - y}%`, backgroundColor: c }}
+                          />
+                        );
+                      })}
+
+                  {/* Y-axis labels: 0 to 8 */}
+                  {Array.from({ length: 9 }, (_, i) => {
+                    const yVal = i; // 0 to 8
+                    const yPct = (i / 8) * 100; // 0 to 100%
                     return (
                       <div
-                        key={idx}
-                        className="absolute h-2 w-2 -translate-x-1 -translate-y-1 rounded-full border border-white"
-                        style={{ left: `${x}%`, top: `${100 - y}%`, backgroundColor: c }}
-                      />
+                        key={`y-label-${i}`}
+                        className="absolute text-[10px] text-gray-600"
+                        style={{ 
+                          left: "10px", 
+                          top: i === 0 ? "calc(100% - 5px)" : `${100 - yPct}%`, 
+                          transform: "translateY(-50%)" 
+                        }}
+                      >
+                        {i !== 0 && i !== 8 ? yVal : ""}
+                      </div>
                     );
                   })}
 
-                  {/* axis titles at actual axes (y=center, x=center); y not rotated */}
-                  <div
-                    className="absolute text-xs text-gray-600"
-                    style={{ left: "50%", bottom: "10px", transform: "translateX(-50%)" }}
-                  >
-                    Horizontal Break (in)
+                  {/* Y-axis title */}
+                      <div
+                        className="absolute text-xs text-gray-600"
+                    style={{ left: "-25px", top: "50%", transform: "translateY(-50%) rotate(-90deg)" }}
+                      >
+                        Release Height (ft)
                   </div>
-                  <div
-                    className="absolute text-xs text-gray-600"
-                    style={{ left: "-50px", top: "50%", transform: "translateY(-50%) rotate(-90deg)" }}
-                  >
-                    Induced Vertical Break (in)
-                  </div>
+                      </div>
 
-                  {/* ticks aligned to grid lines, drawn on the central axes; skip labeling 0 on both axes */}
-                  {Array.from({ length: 11 }, (_, i) => {
-                    const v = -25 + i * 5;
-                    const xPct = (i / 10) * 100;
-                    const yPct = (i / 10) * 100;
-                    const isCenter = i === 5;
-                    // Helpers to avoid label overflow at left/right extremes
-                    const xLabelStyle =
-                      i === 0
-                        ? { left: `0%`, top: `calc(50% + 6px)`, transform: "translateX(0)" }
-                        : i === 10
-                        ? { left: `100%`, top: `calc(50% + 6px)`, transform: "translateX(-100%)" }
-                        : { left: `${xPct}%`, top: `calc(50% + 6px)`, transform: "translateX(-50%)" };
-                    return (
-                      <React.Fragment key={`tick-${i}`}>
-                        {/* x-axis ticks on center horizontal axis */}
-                        <div
-                          className="absolute w-[2px] h-3 bg-gray-400"
-                          style={{ left: `${xPct}%`, top: "calc(50% - 1.5px)" }}
-                        />
-                        {!(isCenter || i === 0 || i === 10) && (
-                          <div className="absolute text-[10px] text-gray-600" style={xLabelStyle as any}>
-                            {v}
-                          </div>
-                        )}
-                        {/* y-axis ticks on center vertical axis */}
-                        <div
-                          className="absolute h-[2px] w-3 bg-gray-400"
-                          style={{ left: "calc(50% - 1.5px)", top: `${100 - yPct}%` }}
-                        />
-                        {!(isCenter || i === 0 || i === 10) && (
-                          <div
-                            className="absolute text-[10px] text-gray-600"
-                            style={{ left: "calc(50% + 6px)", top: `${100 - yPct}%`, transform: "translateY(-50%)" }}
-                          >
-                            {v}
-                          </div>
-                        )}
-                      </React.Fragment>
-                    );
-                  })}
+                {/* X-axis labels and title outside the graph */}
+                <div className="relative mt-2">
+                  {/* X-axis labels: -5 to 5 */}
+                      {Array.from({ length: 11 }, (_, i) => {
+                    const xVal = -5 + i * 1; // -5 to 5
+                    const xPct = (i / 10) * 100; // 0 to 100%
+                        return (
+                      <div
+                        key={`x-label-${i}`}
+                                className="absolute text-[10px] text-gray-600"
+                        style={{ left: `${xPct}%`, top: "0px", transform: "translateX(-50%)" }}
+                              >
+                        {i !== 0 && i !== 10 ? xVal : ""}
+                              </div>
+                        );
+                      })}
+
+                  {/* X-axis title */}
+                  <div
+                    className="absolute text-xs text-gray-600"
+                    style={{ left: "50%", top: "20px", transform: "translateX(-50%)" }}
+                  >
+                    Release Side (ft)
+                              </div>
                 </div>
               </div>
             </div>
@@ -772,31 +901,31 @@ export default function PrintPitcherReport({
           {/* Global Print Styles */}
           <style jsx global>{`
             @media print {
-              * { 
-                -webkit-print-color-adjust: exact !important; 
-                print-color-adjust: exact !important; 
+              * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
               }
-              body { 
-                margin: 0 !important; 
-                padding: 0 !important; 
-                background: white !important; 
-                font-size: 12px !important; 
+              body {
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white !important;
+                font-size: 12px !important;
               }
-              .no-print { 
-                display: none !important; 
+              .no-print {
+                display: none !important;
               }
-              .avoid-break { 
-                break-inside: avoid; 
-                page-break-inside: avoid; 
+              .avoid-break {
+                break-inside: avoid;
+                page-break-inside: avoid;
               }
               /* Compact the stats table and make font responsive to page width */
-              .printable-report table { 
-                width: 100% !important; 
-                table-layout: fixed !important; 
-                font-size: clamp(8px, 0.85vw, 11px) !important; 
+              .printable-report table {
+                width: 100% !important;
+                table-layout: fixed !important;
+                font-size: clamp(8px, 0.85vw, 11px) !important;
               }
               .printable-report th, .printable-report td { 
-                padding: 0.25em 0.4em !important; 
+                padding: 0.25em 0.4em !important;
                 line-height: 1.15 !important;
               }
             }

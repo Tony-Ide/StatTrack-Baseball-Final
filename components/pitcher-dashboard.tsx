@@ -822,6 +822,9 @@ export default function PitcherDashboard({ pitcher, games = [], pitchTypes }: Pi
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
                       
+                      // Filter by batter side
+                      if (heatmapSelectedBatterSide !== "all" && pitch.batter?.side !== heatmapSelectedBatterSide) return false;
+                      
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
                       
@@ -873,6 +876,9 @@ export default function PitcherDashboard({ pitcher, games = [], pitchTypes }: Pi
                         const pitchDate = new Date(pitch.date);
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
+                      
+                      // Filter by batter side
+                      if (heatmapSelectedBatterSide !== "all" && pitch.batter?.side !== heatmapSelectedBatterSide) return false;
                       
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
@@ -930,6 +936,9 @@ export default function PitcherDashboard({ pitcher, games = [], pitchTypes }: Pi
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
                       
+                      // Filter by batter side
+                      if (heatmapSelectedBatterSide !== "all" && pitch.batter?.side !== heatmapSelectedBatterSide) return false;
+                      
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
                       
@@ -982,6 +991,9 @@ export default function PitcherDashboard({ pitcher, games = [], pitchTypes }: Pi
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
                       
+                      // Filter by batter side
+                      if (heatmapSelectedBatterSide !== "all" && pitch.batter?.side !== heatmapSelectedBatterSide) return false;
+                      
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
                       
@@ -1033,6 +1045,9 @@ export default function PitcherDashboard({ pitcher, games = [], pitchTypes }: Pi
                         const pitchDate = new Date(pitch.date);
                         if (pitchDate.getMonth() + 1 !== parseInt(heatmapSelectedMonth)) return false;
                       }
+                      
+                      // Filter by batter side
+                      if (heatmapSelectedBatterSide !== "all" && pitch.batter?.side !== heatmapSelectedBatterSide) return false;
                       
                       // Filter by pitch type
                       if (heatmapSelectedPitchType !== "all" && pitch.auto_pitch_type !== heatmapSelectedPitchType) return false;
