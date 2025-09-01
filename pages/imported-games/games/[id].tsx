@@ -6,9 +6,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Badge } from "@/components/ui/badge"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { parseGameDate } from "@/lib/utils"
+import { parseGameDate, displayInningsPitched } from "@/lib/utils"
 import { supabase } from "@/lib/supabase"
 import GameDayViewer from "@/components/GameDayViewer"
+import { ChevronDown, ChevronRight } from "lucide-react"
 
 // Helper function to determine season from game date (same as in user-games.ts)
 function getSeasonFromDate(dateString: string): string {
@@ -341,7 +342,10 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
   const [homeTeamId, setHomeTeamId] = useState<string | null>(null)
   const [awayTeamId, setAwayTeamId] = useState<string | null>(null)
   const [selectedHitter, setSelectedHitter] = useState<string | null>(null)
+  const [selectedPitcher, setSelectedPitcher] = useState<string | null>(null)
   const [selectedPlateAppearance, setSelectedPlateAppearance] = useState<any>(null)
+  const [expandedPAs, setExpandedPAs] = useState<Set<string>>(new Set())
+  const [selectedPitch, setSelectedPitch] = useState<any>(null)
 
   useEffect(() => {
     const fetchGameData = async () => {
@@ -389,18 +393,21 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
 
         setCurrentGame(targetGame)
 
-        // Filter games to only include those from the same season
-        const seasonGames = allGamesData.filter((season: any) => season.season === targetSeason)
-        setGames(seasonGames)
-        
+        // Only include the specific game that was clicked
+        const singleGameSeason = [{
+          season: targetSeason,
+          games: [targetGame]
+        }]
+        setGames(singleGameSeason)
+
         // Debug: Show games prop structure
         console.log('=== GAMES PROP DEBUG ===')
-        console.log('Games prop structure:', seasonGames)
-        console.log('Number of seasons:', seasonGames.length)
-        seasonGames.forEach((season: any, index: number) => {
+        console.log('Games prop structure:', singleGameSeason)
+        console.log('Number of seasons:', singleGameSeason.length)
+        singleGameSeason.forEach((season: any, index: number) => {
           console.log(`Season ${index + 1}:`, season.season, '-', season.games.length, 'games')
         })
-        console.log('Total games:', seasonGames.reduce((total: number, season: any) => total + season.games.length, 0))
+        console.log('Total games:', singleGameSeason.reduce((total: number, season: any) => total + season.games.length, 0))
         console.log('=== END GAMES PROP DEBUG ===')
 
 
@@ -546,6 +553,27 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
     return player ? player.name : `Unknown Player (${batterId})`
   }
 
+  // Helper function to format player name to show only first initial of first name
+  const formatPlayerName = (fullName: string) => {
+    if (!fullName) return fullName
+    
+    // Handle names like "Palmeira, Konnor" -> "Palmeira, K"
+    if (fullName.includes(',')) {
+      const parts = fullName.split(',')
+      if (parts.length === 2) {
+        const lastName = parts[0].trim()
+        const firstName = parts[1].trim()
+        if (firstName) {
+          const firstInitial = firstName.charAt(0)
+          return `${lastName}, ${firstInitial}`
+        }
+      }
+    }
+    
+    // Return original name if no pattern matches
+    return fullName
+  }
+
   // Helper function to get ordered hitters for a team
   const getOrderedHitters = (teamId: string | null, teamPlayers: any[]) => {
     if (!teamId || !games.length || !currentGame) return []
@@ -652,7 +680,9 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
 
           // Format the result text based on kor_bb
           let resultText = ''
-          if (lastPitch.kor_bb && lastPitch.kor_bb !== 'Undefined') {
+          if (lastPitch.pitch_call === 'HitByPitch') {
+            resultText = lastPitch.pitch_call
+          } else if (lastPitch.kor_bb && lastPitch.kor_bb !== 'Undefined') {
             resultText = lastPitch.kor_bb
           } else {
             const hitType = lastPitch.tagged_hit_type || 'Unknown'
@@ -760,6 +790,248 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
   const homeTeamPitchers = getOrderedPitchers(homeTeamId, homeTeamPlayers)
   const awayTeamPitchers = getOrderedPitchers(awayTeamId, awayTeamPlayers)
 
+  // Helper function to get at-bats for a selected pitcher
+  const getAtBatsForPitcher = (pitcherId: string | null) => {
+    if (!pitcherId || !games.length || !currentGame) return []
+
+    // Find the target game
+    let targetGame: any = null
+    for (const season of games) {
+      for (const game of season.games) {
+        if (game.game_uid === currentGame.game_uid) {
+          targetGame = game
+          break
+        }
+      }
+      if (targetGame) break
+    }
+
+    if (!targetGame) return []
+
+    const atBats: any[] = []
+
+    // Extract all plate appearances for this pitcher
+    targetGame.innings?.forEach((inning: any) => {
+      inning.plate_appearances?.forEach((pa: any) => {
+        // Check if this pitcher appears in this plate appearance
+        const pitcherPitches = pa.pitches?.filter((pitch: any) => pitch.pitcher_id === pitcherId) || []
+        
+        if (pitcherPitches.length > 0) {
+          // Get the last pitch of the plate appearance
+          const lastPitch = pitcherPitches[pitcherPitches.length - 1]
+          
+          // Get pitcher name
+          const allPitchers = [...homeTeamPitchers, ...awayTeamPitchers]
+          const pitcher = allPitchers.find(p => p.pitcher_id === pitcherId)
+          const pitcherName = pitcher?.name || `Unknown (${pitcherId})`
+
+          // Get batter name for this plate appearance
+          const batterPitches = pa.pitches?.filter((pitch: any) => pitch.batter_id) || []
+          const firstBatterPitch = batterPitches[0]
+          const batterName = firstBatterPitch ? getPlayerNameByBatterId(firstBatterPitch.batter_id, [...homeTeamPlayers, ...awayTeamPlayers]) : 'Unknown Batter'
+
+          // Format the result text based on kor_bb
+          let resultText = ''
+          if (lastPitch.pitch_call === 'HitByPitch') {
+            resultText = lastPitch.pitch_call
+          } else if (lastPitch.kor_bb && lastPitch.kor_bb !== 'Undefined') {
+            resultText = lastPitch.kor_bb
+          } else {
+            const hitType = lastPitch.tagged_hit_type || 'Unknown'
+            const playResult = lastPitch.play_result || 'Unknown'
+            resultText = `${hitType} - ${playResult}`
+          }
+
+          // Get count and outs
+          const count = `${lastPitch.balls || 0}-${lastPitch.strikes || 0}`
+          const outs = lastPitch.outs || 0
+
+          atBats.push({
+            inning: inning.inning,
+            top_bottom: inning.top_bottom,
+            pa_of_inning: pa.pa_of_inning,
+            pitcherName,
+            batterName,
+            result: resultText,
+            count,
+            outs,
+            lastPitch,
+            allPitches: pa.pitches || [] // Include all pitches for this plate appearance
+          })
+        }
+      })
+    })
+
+    // Sort by inning, top/bottom, and pa_of_inning
+    atBats.sort((a, b) => {
+      if (a.inning !== b.inning) return a.inning - b.inning
+      if (a.top_bottom !== b.top_bottom) return a.top_bottom === 'Top' ? -1 : 1
+      return a.pa_of_inning - b.pa_of_inning
+    })
+
+    return atBats
+  }
+
+  const selectedPitcherAtBats = getAtBatsForPitcher(selectedPitcher)
+
+  // Helper function to calculate hitter stats for a specific player
+  const calculateHitterStats = (batterId: string) => {
+    if (!games.length || !currentGame) return { pa: 0, singles: 0, doubles: 0, triples: 0, hr: 0, bb: 0, k: 0, hbp: 0 }
+
+    // Find the target game
+    let targetGame: any = null
+    for (const season of games) {
+      for (const game of season.games) {
+        if (game.game_uid === currentGame.game_uid) {
+          targetGame = game
+          break
+        }
+      }
+      if (targetGame) break
+    }
+
+    if (!targetGame) return { pa: 0, singles: 0, doubles: 0, triples: 0, hr: 0, bb: 0, k: 0, hbp: 0 }
+
+    // Extract all pitches for this batter
+    const allPitches: any[] = []
+    targetGame.innings?.forEach((inning: any) => {
+      inning.plate_appearances?.forEach((pa: any) => {
+        pa.pitches?.forEach((pitch: any) => {
+          if (pitch.batter_id === batterId) {
+            allPitches.push(pitch)
+          }
+        })
+      })
+    })
+
+    // Calculate plate appearances using unique combinations (same logic as games-log-table)
+    const plateAppearances = new Set()
+    allPitches.forEach((pitch: any) => {
+      plateAppearances.add(`${pitch.game_id}-${pitch.inning}-${pitch.top_bottom}-${pitch.pa_of_inning}`)
+    })
+    const pa = plateAppearances.size
+
+    // Calculate hit types
+    const singles = allPitches.filter((p: any) => p.play_result === 'Single').length
+    const doubles = allPitches.filter((p: any) => p.play_result === 'Double').length
+    const triples = allPitches.filter((p: any) => p.play_result === 'Triple').length
+    const hr = allPitches.filter((p: any) => p.play_result === 'HomeRun').length
+
+    // Calculate other stats
+    const bb = allPitches.filter((p: any) => p.kor_bb === 'Walk').length
+    const k = allPitches.filter((p: any) => p.kor_bb === 'Strikeout').length
+    const hbp = allPitches.filter((p: any) => p.pitch_call === 'HitByPitch').length
+
+    return { pa, singles, doubles, triples, hr, bb, k, hbp }
+  }
+
+  // Helper function to calculate pitcher stats for a specific player
+  const calculatePitcherStats = (pitcherId: string) => {
+    if (!games.length || !currentGame) return { ip: 0, h: 0, bb: 0, k: 0, hr: 0 }
+
+    // Find the target game
+    let targetGame: any = null
+    for (const season of games) {
+      for (const game of season.games) {
+        if (game.game_uid === currentGame.game_uid) {
+          targetGame = game
+          break
+        }
+      }
+      if (targetGame) break
+    }
+
+    if (!targetGame) return { ip: 0, h: 0, bb: 0, k: 0, hr: 0 }
+
+    // Extract all pitches for this pitcher
+    const allPitches: any[] = []
+    targetGame.innings?.forEach((inning: any) => {
+      inning.plate_appearances?.forEach((pa: any) => {
+        pa.pitches?.forEach((pitch: any) => {
+          if (pitch.pitcher_id === pitcherId) {
+            allPitches.push(pitch)
+          }
+        })
+      })
+    })
+
+    // Calculate IP (same logic as games-log-table)
+    let ip = 0
+    const innings = new Map()
+    allPitches.forEach((pitch: any) => {
+      const inningKey = `${pitch.inning}_${pitch.top_bottom}`
+      if (!innings.has(inningKey)) {
+        innings.set(inningKey, { maxOuts: pitch.outs, minOuts: pitch.outs, lastPitch: pitch })
+      } else {
+        const inning = innings.get(inningKey)
+        inning.maxOuts = Math.max(inning.maxOuts, pitch.outs)
+        inning.minOuts = Math.min(inning.minOuts, pitch.outs)
+        inning.lastPitch = pitch
+      }
+    })
+
+    innings.forEach((inning: any) => {
+      let inningOuts = inning.maxOuts - inning.minOuts
+      if (inning.lastPitch.kor_bb === 'Strikeout') {
+        inningOuts += 1
+      }
+      if (inning.lastPitch.outs_on_play) {
+        inningOuts += inning.lastPitch.outs_on_play
+      }
+      ip += inningOuts / 3
+    })
+
+    // Calculate other stats
+    const h = allPitches.filter((p: any) => 
+      ['Single', 'Double', 'Triple', 'HomeRun'].includes(p.play_result)
+    ).length
+    const bb = allPitches.filter((p: any) => p.kor_bb === 'Walk').length
+    const k = allPitches.filter((p: any) => p.kor_bb === 'Strikeout').length
+    const hr = allPitches.filter((p: any) => p.play_result === 'HomeRun').length
+
+    return { ip, h, bb, k, hr }
+  }
+
+  // Helper function to calculate team totals for hitters
+  const calculateTeamHitterTotals = (teamHitters: any[]) => {
+    const totals = { pa: 0, singles: 0, doubles: 0, triples: 0, hr: 0, bb: 0, k: 0, hbp: 0 }
+    
+    teamHitters.forEach(player => {
+      const stats = calculateHitterStats(player.batter_id)
+      totals.pa += stats.pa
+      totals.singles += stats.singles
+      totals.doubles += stats.doubles
+      totals.triples += stats.triples
+      totals.hr += stats.hr
+      totals.bb += stats.bb
+      totals.k += stats.k
+      totals.hbp += stats.hbp
+    })
+    
+    return totals
+  }
+
+  // Helper function to calculate team totals for pitchers
+  const calculateTeamPitcherTotals = (teamPitchers: any[]) => {
+    const totals = { ip: 0, h: 0, bb: 0, k: 0, hr: 0 }
+    
+    teamPitchers.forEach(pitcher => {
+      const stats = calculatePitcherStats(pitcher.pitcher_id)
+      totals.ip += stats.ip
+      totals.h += stats.h
+      totals.bb += stats.bb
+      totals.k += stats.k
+      totals.hr += stats.hr
+    })
+    
+    return totals
+  }
+
+  // Calculate team totals
+  const homeTeamHitterTotals = calculateTeamHitterTotals(homeTeamHitters)
+  const awayTeamHitterTotals = calculateTeamHitterTotals(awayTeamHitters)
+  const homeTeamPitcherTotals = calculateTeamPitcherTotals(homeTeamPitchers)
+  const awayTeamPitcherTotals = calculateTeamPitcherTotals(awayTeamPitchers)
 
 
   if (loading) {
@@ -810,11 +1082,35 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
 
   const handleAtBatClick = (atBat: any) => {
     setSelectedPlateAppearance(atBat)
+    setSelectedPitch(null)
+    const key = getPAKey(atBat)
+    setExpandedPAs(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key); else next.add(key)
+      return next
+    })
+    // Switch camera to Catcher's View
+    try {
+      if (typeof window !== 'undefined' && (window as any).setCatcherView) {
+        (window as any).setCatcherView()
+      }
+    } catch {}
   }
 
-  const handleLineupPlayerClick = (playerName: string, batterId: string) => {
-    setSelectedHitter(batterId)
+  const handleLineupPlayerClick = (playerName: string, playerId: string, isPitcher: boolean = false) => {
+    if (isPitcher) {
+      setSelectedPitcher(playerId)
+      setSelectedHitter(null)
+    } else {
+      setSelectedHitter(playerId)
+      setSelectedPitcher(null)
+    }
+    setSelectedPlateAppearance(null)
+    setSelectedPitch(null)
+    setExpandedPAs(new Set())
   }
+
+  const getPAKey = (pa: any) => `${pa.top_bottom}${pa.inning}-pa${pa.pa_of_inning}`
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-950 dark:to-slate-900 p-4">
@@ -843,39 +1139,102 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
           <div className="xl:col-span-2 lg:col-span-3 md:col-span-4">
             <Card className="shadow-lg border-0 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm">
               <CardHeader className="pb-4">
-                <CardTitle className="text-slate-900 dark:text-slate-100 text-lg font-semibold">Plate Appearances</CardTitle>
+                <CardTitle className="text-slate-900 dark:text-slate-100 text-lg font-semibold">
+                  {selectedPitcher ? 'Pitcher Appearances' : 'Plate Appearances'}
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <ScrollArea className="h-[400px] lg:h-[500px] pr-4">
                   <div className="space-y-3">
-                    {selectedHitterAtBats.map((atBat, index) => (
-                      <div
-                        key={index}
-                        className="p-3 lg:p-4 rounded-lg bg-slate-50 dark:bg-slate-700/50 hover:bg-slate-100 dark:hover:bg-slate-700 cursor-pointer transition-all duration-200 border border-slate-200/50 dark:border-slate-600/50 hover:shadow-md"
+                    {(selectedPitcher ? selectedPitcherAtBats : selectedHitterAtBats).map((atBat, index) => {
+                      const key = getPAKey(atBat)
+                      const isOpen = expandedPAs.has(key)
+                      const sortedPitches = [...(atBat.allPitches || [])]
+                        .sort((a, b) => (a?.pitch_of_pa || 0) - (b?.pitch_of_pa || 0))
+                      return (
+                        <div key={index} className={`p-3 lg:p-4 rounded-lg border border-slate-200/50 dark:border-slate-600/50 hover:shadow-md hover:bg-gray-200 dark:hover:bg-gray-700 ${
+                          selectedPlateAppearance && getPAKey(selectedPlateAppearance) === key 
+                            ? 'bg-gray-200 dark:bg-gray-700' 
+                            : 'bg-slate-50 dark:bg-slate-700/50'
+                        }`}>
+                          <button
+                            className="w-full text-left"
                         onClick={() => handleAtBatClick(atBat)}
                       >
-                        <div className="flex justify-between items-start mb-2">
+                            <div className="flex items-start justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                {isOpen ? (
+                                  <ChevronDown className="w-4 h-4 text-slate-500" />
+                                ) : (
+                                  <ChevronRight className="w-4 h-4 text-slate-500" />
+                                )}
                           <Badge
                             variant="secondary"
                             className="text-xs font-medium bg-slate-200 dark:bg-slate-600 text-slate-700 dark:text-slate-300"
                           >
-                            {atBat.top_bottom}{atBat.inning}
+                                  {atBat.top_bottom}{atBat.inning}
                           </Badge>
+                              </div>
                           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{atBat.count}</span>
                         </div>
                         <div className="font-semibold text-sm mb-1 text-slate-900 dark:text-slate-100">
-                          {atBat.hitterName}
+                              {selectedPitcher ? atBat.batterName : atBat.hitterName}
                         </div>
-                        <div className="text-xs text-slate-600 dark:text-slate-400 mb-2">Outs: {atBat.outs}</div>
+                            <div className="text-xs text-slate-600 dark:text-slate-400 mb-2">Outs: {atBat.outs}</div>
                         <div className="text-xs font-medium text-blue-600 dark:text-blue-400">{atBat.result}</div>
-                      </div>
-                    ))}
-                    {selectedHitterAtBats.length === 0 && selectedHitter && (
+                          </button>
+                          {isOpen && (
+                            <div className="mt-3 border-t border-slate-200 dark:border-slate-600 pt-3">
+                              <div className="flex flex-col gap-2">
+                                {sortedPitches.map((p: any) => (
+                                  <button
+                                    key={p.pitch_uid}
+                                    className={`w-full text-left px-3 py-2 rounded-md border text-[10px] md:text-[11px] border-slate-200 dark:border-slate-600 hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors ${
+                                      selectedPitch && selectedPitch.pitch_uid === p.pitch_uid
+                                        ? 'bg-gray-300 dark:bg-gray-600'
+                                        : 'bg-white/70 dark:bg-slate-800/70'
+                                    }`}
+                                    onClick={() => {
+                                      // Placeholder click behavior for pitch box
+                                      console.log('Pitch clicked:', {
+                                        pitch_uid: p.pitch_uid,
+                                        pitch_of_pa: p.pitch_of_pa,
+                                        pitch_call: p.pitch_call,
+                                        balls: p.balls,
+                                        strikes: p.strikes,
+                                        outs: p.outs,
+                                      })
+                                      // Keep selected plate appearance the same
+                                      setSelectedPlateAppearance(atBat)
+                                      // Set selected pitch for the 3D viewer to render trajectories
+                                      setSelectedPitch(p)
+                                      // Ensure camera is in Catcher's View for consistency
+                                      try {
+                                        if (typeof window !== 'undefined' && (window as any).setCatcherView) {
+                                          (window as any).setCatcherView()
+                                        }
+                                      } catch {}
+                                    }}
+                                  >
+                                    <div className="font-semibold text-[11px]">P{p.pitch_of_pa ?? '-'} · {p.pitch_call === 'FoulBallNotFieldable' ? 'Foul' : (p.pitch_call || 'Unknown')}</div>
+                                    <div className="text-[10px] text-slate-600 dark:text-slate-400">{(p.balls || 0)}-{(p.strikes || 0)} · Outs: {(p.outs || 0)}</div>
+                                  </button>
+                                ))}
+                                {sortedPitches.length === 0 && (
+                                  <div className="text-xs text-slate-500 dark:text-slate-400">No pitches found for this plate appearance</div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      )
+                    })}
+                    {(selectedPitcher ? selectedPitcherAtBats : selectedHitterAtBats).length === 0 && (selectedHitter || selectedPitcher) && (
                       <div className="text-center text-slate-500 dark:text-slate-400 py-8">
-                        No at-bats found for this player
+                        No {selectedPitcher ? 'appearances' : 'at-bats'} found for this {selectedPitcher ? 'pitcher' : 'player'}
                       </div>
                     )}
-                    {!selectedHitter && (
+                    {!selectedHitter && !selectedPitcher && (
                       <div className="text-center text-slate-500 dark:text-slate-400 py-8">
                         Click on a player to view their at-bats
                       </div>
@@ -894,11 +1253,11 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
                               <CardContent className="p-0 h-[400px] lg:h-[500px]">
                   <GameDayViewer 
                     games={games} 
-                    selectedPitch={null}
-                    onPitchSelect={() => {}}
+                    selectedPitch={selectedPitch}
+                    onPitchSelect={setSelectedPitch}
                     selectedPlateAppearance={selectedPlateAppearance}
                   />
-                </CardContent>
+              </CardContent>
             </Card>
           </div>
 
@@ -930,8 +1289,9 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
                             </h3>
 
                                                        {/* Header Row */}
-                            <div className="grid grid-cols-9 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
+                            <div className="grid grid-cols-12 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
                               <div className="col-span-2 pl-1">PLAYER</div>
+                              <div className="text-center"></div>
                               <div className="text-center">PA</div>
                               <div className="text-center">1B</div>
                               <div className="text-center">2B</div>
@@ -939,43 +1299,51 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
                               <div className="text-center">HR</div>
                               <div className="text-center">BB</div>
                               <div className="text-center">K</div>
-                              <div className="text-center">AVG</div>
+                              <div className="text-center">HBP</div>
+                              <div className="text-center"></div>
                             </div>
 
                                                      {/* Player Rows */}
-                          {homeTeamHitters.map((player, index) => (
-                            <div
+                          {homeTeamHitters.map((player, index) => {
+                            const stats = calculateHitterStats(player.batter_id)
+                            return (
+                              <div
                               key={player.batter_id}
-                              className="grid grid-cols-9 gap-1 text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer rounded transition-colors duration-150 border-b border-slate-100 dark:border-slate-800 last:border-b-0"
-                              onClick={() => handleLineupPlayerClick(player.name, player.batter_id)}
-                            >
-                              <div className="col-span-2 font-medium pl-1">
-                                <span className="text-slate-900 dark:text-slate-100 font-semibold truncate block">{player.name}</span>
-                              </div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center font-semibold text-slate-900 dark:text-slate-100">
-                                -
-                              </div>
-                            </div>
-                          ))}
+                                className={`grid grid-cols-12 gap-1 text-xs py-2 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer rounded transition-colors duration-150 border-b border-slate-100 dark:border-slate-800 last:border-b-0 ${
+                                  selectedHitter === player.batter_id ? 'bg-gray-200 dark:bg-gray-700' : ''
+                                }`}
+                              onClick={() => handleLineupPlayerClick(player.name, player.batter_id, false)}
+                              >
+                                <div className="col-span-3 font-medium pl-1">
+                                  <span className="text-slate-900 dark:text-slate-100 font-semibold truncate block">{formatPlayerName(player.name)}</span>
+                                </div>
+                                
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.pa}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.singles}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.doubles}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.triples}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.hr}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.bb}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.k}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.hbp}</div>
+                                <div className="text-center"></div>
+                                </div>
+                            )
+                          })}
 
                                                         {/* Totals Row */}
-                            <div className="grid grid-cols-9 gap-1 text-xs py-1 border-t-2 border-slate-300 dark:border-slate-600 mt-2 font-semibold bg-slate-50 dark:bg-slate-700/30 rounded">
+                            <div className="grid grid-cols-12 gap-1 text-xs py-1 border-t-2 border-slate-300 dark:border-slate-600 mt-2 font-semibold bg-slate-50 dark:bg-slate-700/30 rounded">
                               <div className="col-span-2 text-slate-900 dark:text-slate-100 pl-1">Totals</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300"></div>
+                              <div className="text-center"></div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.pa}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.singles}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.doubles}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.triples}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.hr}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.bb}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.k}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{homeTeamHitterTotals.hbp}</div>
+                              <div className="text-center"></div>
                             </div>
                         </div>
 
@@ -985,38 +1353,37 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
                            </h3>
 
                           {/* Header Row */}
-                          <div className="grid grid-cols-9 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-3 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
+                          <div className="grid grid-cols-7 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-3 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
                             <div className="col-span-2 pl-2">PITCHER</div>
                             <div className="text-center">IP</div>
                             <div className="text-center">H</div>
-                            <div className="text-center">R</div>
-                            <div className="text-center">ER</div>
                             <div className="text-center">BB</div>
                             <div className="text-center">K</div>
-                            <div className="text-center pr-2">ERA</div>
+                            <div className="text-center">HR</div>
                           </div>
 
                           {/* Pitcher Rows */}
-                          {homeTeamPitchers.map((pitcher, index) => (
-                            <div
-                              key={pitcher.pitcher_id}
-                              className="grid grid-cols-9 gap-1 text-xs py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer rounded transition-colors duration-150"
-                              onClick={() => handleLineupPlayerClick(pitcher.name, pitcher.pitcher_id)}
+                          {homeTeamPitchers.map((pitcher, index) => {
+                            const stats = calculatePitcherStats(pitcher.pitcher_id)
+                            return (
+                              <div
+                                key={pitcher.pitcher_id}
+                                className={`grid grid-cols-7 gap-1 text-xs py-2 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer rounded transition-colors duration-150 ${
+                                  selectedPitcher === pitcher.pitcher_id ? 'bg-gray-200 dark:bg-gray-700' : ''
+                                }`}
+                                onClick={() => handleLineupPlayerClick(pitcher.name, pitcher.pitcher_id, true)}
                             >
                               <div className="col-span-2 font-semibold text-slate-900 dark:text-slate-100 pl-2">
-                                {pitcher.name}
+                                {formatPlayerName(pitcher.name)}
                               </div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center font-semibold text-slate-900 dark:text-slate-100 pr-2">
-                                -
+                                <div className="text-center text-slate-700 dark:text-slate-300">{displayInningsPitched(stats.ip)}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.h}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.bb}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.k}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.hr}</div>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     </ScrollArea>
@@ -1032,8 +1399,9 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
                             </h3>
 
                                                        {/* Header Row */}
-                            <div className="grid grid-cols-9 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
+                            <div className="grid grid-cols-12 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-2 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
                               <div className="col-span-2 pl-1">PLAYER</div>
+                              <div className="text-center"></div>
                               <div className="text-center">PA</div>
                               <div className="text-center">1B</div>
                               <div className="text-center">2B</div>
@@ -1041,43 +1409,51 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
                               <div className="text-center">HR</div>
                               <div className="text-center">BB</div>
                               <div className="text-center">K</div>
-                              <div className="text-center">AVG</div>
+                              <div className="text-center">HBP</div>
+                              <div className="text-center"></div>
                             </div>
 
                             {/* Player Rows */}
-                            {awayTeamHitters.map((player, index) => (
-                              <div
+                            {awayTeamHitters.map((player, index) => {
+                              const stats = calculateHitterStats(player.batter_id)
+                              return (
+                                <div
                                 key={player.batter_id}
-                                className="grid grid-cols-9 gap-1 text-xs py-1 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer rounded transition-colors duration-150 border-b border-slate-100 dark:border-slate-800 last:border-b-0"
-                                onClick={() => handleLineupPlayerClick(player.name, player.batter_id)}
-                              >
-                                <div className="col-span-2 font-medium pl-1">
-                                  <span className="text-slate-900 dark:text-slate-100 font-semibold truncate block">{player.name}</span>
-                                </div>
-                                <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                                <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                                <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                                <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                                <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                                <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                                <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                                <div className="text-center font-semibold text-slate-900 dark:text-slate-100">
-                                  -
-                                </div>
-                              </div>
-                            ))}
+                                  className={`grid grid-cols-12 gap-1 text-xs py-2 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer rounded transition-colors duration-150 border-b border-slate-100 dark:border-slate-800 last:border-b-0 ${
+                                    selectedHitter === player.batter_id ? 'bg-gray-200 dark:bg-gray-700' : ''
+                                  }`}
+                                onClick={() => handleLineupPlayerClick(player.name, player.batter_id, false)}
+                                >
+                                  <div className="col-span-3 font-medium pl-1">
+                                    <span className="text-slate-900 dark:text-slate-100 font-semibold truncate block">{formatPlayerName(player.name)}</span>
+                                  </div>
+                                
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.pa}</div>
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.singles}</div>
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.doubles}</div>
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.triples}</div>
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.hr}</div>
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.bb}</div>
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.k}</div>
+                                  <div className="text-center text-slate-700 dark:text-slate-300">{stats.hbp}</div>
+                                  <div className="text-center"></div>
+                                  </div>
+                              )
+                            })}
 
                                                         {/* Totals Row */}
-                            <div className="grid grid-cols-9 gap-1 text-xs py-1 border-t-2 border-slate-300 dark:border-slate-600 mt-2 font-semibold bg-slate-50 dark:bg-slate-700/30 rounded">
+                            <div className="grid grid-cols-12 gap-1 text-xs py-1 border-t-2 border-slate-300 dark:border-slate-600 mt-2 font-semibold bg-slate-50 dark:bg-slate-700/30 rounded">
                               <div className="col-span-2 text-slate-900 dark:text-slate-100 pl-1">Totals</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">0</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300"></div>
+                              <div className="text-center"></div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.pa}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.singles}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.doubles}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.triples}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.hr}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.bb}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.k}</div>
+                              <div className="text-center text-slate-700 dark:text-slate-300">{awayTeamHitterTotals.hbp}</div>
+                              <div className="text-center"></div>
                             </div>
                         </div>
 
@@ -1088,38 +1464,37 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
                            </h3>
 
                           {/* Header Row */}
-                          <div className="grid grid-cols-9 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-3 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
+                          <div className="grid grid-cols-7 gap-1 text-xs font-semibold text-slate-600 dark:text-slate-400 mb-3 py-1 bg-slate-50 dark:bg-slate-700/30 rounded">
                             <div className="col-span-2 pl-2">PITCHER</div>
                             <div className="text-center">IP</div>
                             <div className="text-center">H</div>
-                            <div className="text-center">R</div>
-                            <div className="text-center">ER</div>
                             <div className="text-center">BB</div>
                             <div className="text-center">K</div>
-                            <div className="text-center pr-2">ERA</div>
+                            <div className="text-center">HR</div>
                           </div>
 
                           {/* Pitcher Rows */}
-                          {awayTeamPitchers.map((pitcher, index) => (
-                            <div
-                              key={pitcher.pitcher_id}
-                              className="grid grid-cols-9 gap-1 text-xs py-2 hover:bg-slate-50 dark:hover:bg-slate-700/50 cursor-pointer rounded transition-colors duration-150"
-                              onClick={() => handleLineupPlayerClick(pitcher.name, pitcher.pitcher_id)}
+                          {awayTeamPitchers.map((pitcher, index) => {
+                            const stats = calculatePitcherStats(pitcher.pitcher_id)
+                            return (
+                              <div
+                                key={pitcher.pitcher_id}
+                                className={`grid grid-cols-7 gap-1 text-xs py-2 hover:bg-gray-200 dark:hover:bg-gray-700 cursor-pointer rounded transition-colors duration-150 ${
+                                  selectedPitcher === pitcher.pitcher_id ? 'bg-gray-200 dark:bg-gray-700' : ''
+                                }`}
+                                onClick={() => handleLineupPlayerClick(pitcher.name, pitcher.pitcher_id, true)}
                             >
                               <div className="col-span-2 font-semibold text-slate-900 dark:text-slate-100 pl-2">
-                                {pitcher.name}
+                                {formatPlayerName(pitcher.name)}
                               </div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center text-slate-700 dark:text-slate-300">-</div>
-                              <div className="text-center font-semibold text-slate-900 dark:text-slate-100 pr-2">
-                                -
+                                <div className="text-center text-slate-700 dark:text-slate-300">{displayInningsPitched(stats.ip)}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.h}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.bb}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.k}</div>
+                                <div className="text-center text-slate-700 dark:text-slate-300">{stats.hr}</div>
                               </div>
-                            </div>
-                          ))}
+                            )
+                          })}
                         </div>
                       </div>
                     </ScrollArea>

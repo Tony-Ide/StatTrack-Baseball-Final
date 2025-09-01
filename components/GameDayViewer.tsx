@@ -456,6 +456,7 @@ interface GameDayViewerProps {
 export default function GameDayViewer({ games, selectedPitch, onPitchSelect, selectedPlateAppearance }: GameDayViewerProps) {
   const [isCameraLocked, setIsCameraLocked] = useState(false);
   const [localSelectedPitch, setLocalSelectedPitch] = useState<any>(null);
+  const [maintainCatcherView, setMaintainCatcherView] = useState(false);
 
   // Helper to get all pitches from the new hierarchical seasons structure
   const getAllPitches = (seasons: any[]): any[] => {
@@ -549,6 +550,24 @@ export default function GameDayViewer({ games, selectedPitch, onPitchSelect, sel
   };
 
   // Use local selected pitch if available, otherwise use prop
+  // Sync with parent: if parent changes selectedPitch, update local
+  useEffect(() => {
+    if (selectedPitch) {
+      setLocalSelectedPitch(selectedPitch)
+      // If we're maintaining Catcher's View, ensure camera stays there
+      if (maintainCatcherView) {
+        // Small delay to ensure the component has updated
+        setTimeout(() => {
+          if (typeof window !== 'undefined' && (window as any).setCatcherView) {
+            (window as any).setCatcherView();
+          }
+        }, 50);
+      }
+    } else {
+      setLocalSelectedPitch(null)
+    }
+  }, [selectedPitch, maintainCatcherView])
+
   const currentSelectedPitch = localSelectedPitch || selectedPitch;
 
   return (
@@ -579,8 +598,14 @@ export default function GameDayViewer({ games, selectedPitch, onPitchSelect, sel
             enableRotate={!isCameraLocked} 
           />
           <CameraController 
-            onCatcherView={() => setIsCameraLocked(true)} 
-            onDefaultView={() => setIsCameraLocked(false)} 
+            onCatcherView={() => {
+              setIsCameraLocked(true);
+              setMaintainCatcherView(true);
+            }} 
+            onDefaultView={() => {
+              setIsCameraLocked(false);
+              setMaintainCatcherView(false);
+            }} 
           />
         </Canvas>
         {/* Camera Control Buttons - positioned outside Canvas */}
@@ -593,6 +618,7 @@ export default function GameDayViewer({ games, selectedPitch, onPitchSelect, sel
               onClick={() => {
                 setLocalSelectedPitch(null);
                 onPitchSelect?.(null);
+                setMaintainCatcherView(false);
               }}
             >
               Clear Selection
@@ -608,6 +634,7 @@ export default function GameDayViewer({ games, selectedPitch, onPitchSelect, sel
                 // @ts-ignore
                 window.setCatcherView();
               }
+              setMaintainCatcherView(true);
             }}
           >
             Catcher's View
@@ -622,6 +649,7 @@ export default function GameDayViewer({ games, selectedPitch, onPitchSelect, sel
                 // @ts-ignore
                 window.setDefaultView();
               }
+              setMaintainCatcherView(false);
             }}
           >
             Default
