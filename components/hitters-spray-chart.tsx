@@ -246,21 +246,43 @@ function AnimatedBall({ pitch, isAnimating }: { pitch: any, isAnimating: boolean
     return new THREE.CatmullRomCurve3(points);
   }, [pitchTraj]);
 
+  // Create curve for hit trajectory aligned to pitch end (match GameDayViewer)
+  const hitCurve = useMemo(() => {
+    if (!hasValidHitData || !isValidHangTime) return null;
+    const pt = getPitchTrajectoryPointsFromSQL(pitch);
+    if (!pt) return null;
+    const lastIdx = pt.x.length - 1;
+    const [endTx, endTy, endTz] = applyPitchTransform([pt.x[lastIdx], pt.y[lastIdx], pt.z[lastIdx]]);
+    const cx = Number(pitch.hitting_metrics.contact_position_x);
+    const cy = Number(pitch.hitting_metrics.contact_position_y);
+    const cz = Number(pitch.hitting_metrics.contact_position_z);
+    if (!isFinite(cx) || !isFinite(cy) || !isFinite(cz)) return null;
+    const [cTx, cTy, cTz] = applyTransform([cx, cy, cz]);
+    const shiftX = endTx - cTx;
+    const shiftY = endTy - cTy;
+    const shiftZ = endTz - cTz;
+    const N = 100;
+    const points: THREE.Vector3[] = [];
+    points.push(new THREE.Vector3(endTx, endTy, endTz));
+    for (let i = 1; i <= N; ++i) {
+      const t = (hangTime * i) / N;
+      const landing = getLandingPoint(pitch.hit_trajectory, t);
+      const [tx, ty, tz] = applyTransform(landing);
+      points.push(new THREE.Vector3(tx + shiftX, ty + shiftY, tz + shiftZ));
+    }
+    return new THREE.CatmullRomCurve3(points);
+  }, [pitch, hasValidHitData, isValidHangTime, hangTime]);
+
   useFrame((state) => {
     if (!isAnimating || !meshRef.current) return;
     
-    if (hasValidHitData && isValidHangTime) {
-      // Animate along hit trajectory
+    if (hitCurve) {
+      // Animate along aligned hit trajectory
       const animationDuration = 3; // seconds
       const progress = (state.clock.elapsedTime % animationDuration) / animationDuration;
-      const t = progress * hangTime;
-      
-      if (t <= hangTime) {
-        const landing = getLandingPoint(pitch.hit_trajectory, t);
-        const [tx, ty, tz] = applyTransform(landing);
-        meshRef.current.position.set(tx, ty, tz);
-        setCurrentTime(t);
-      }
+      const position = hitCurve.getPoint(progress);
+      meshRef.current.position.copy(position);
+      setCurrentTime(progress * hangTime);
     } else if (pitchCurve) {
       // Animate along pitch trajectory (when hit trajectory is NA)
       const animationDuration = 2; // seconds
@@ -331,30 +353,39 @@ function HitTrajectory3D({ pitch, highlight = false }: { pitch: any, highlight?:
   if (!pitch.hit_trajectory || !pitch.hitting_metrics || pitch.hitting_metrics.hang_time == null) return null;
   const hangTime = Number(pitch.hitting_metrics.hang_time);
   if (!isFinite(hangTime) || hangTime <= 0) return null;
-  
-  // Get contact position from hitting metrics
+
+  // Get pitch trajectory end point for alignment (match GameDayViewer)
+  const pitchTraj = getPitchTrajectoryPointsFromSQL(pitch);
+  if (!pitchTraj) return null;
+  const lastPitchIndex = pitchTraj.x.length - 1;
+  const pitchEndX = pitchTraj.x[lastPitchIndex];
+  const pitchEndY = pitchTraj.y[lastPitchIndex];
+  const pitchEndZ = pitchTraj.z[lastPitchIndex];
+  const [pitchEndTx, pitchEndTy, pitchEndTz] = applyPitchTransform([pitchEndX, pitchEndY, pitchEndZ]);
+
+  // Contact position
   const contactX = Number(pitch.hitting_metrics.contact_position_x);
   const contactY = Number(pitch.hitting_metrics.contact_position_y);
   const contactZ = Number(pitch.hitting_metrics.contact_position_z);
-  
   if (!isFinite(contactX) || !isFinite(contactY) || !isFinite(contactZ)) return null;
-  
-  // Sample points along the trajectory
+  const [contactTx, contactTy, contactTz] = applyTransform([contactX, contactY, contactZ]);
+
+  // Shift so hit traj begins exactly at pitch end
+  const shiftX = pitchEndTx - contactTx;
+  const shiftY = pitchEndTy - contactTy;
+  const shiftZ = pitchEndTz - contactTz;
+
+  // Sample points along the shifted trajectory
   const N = 100;
   const points: [number, number, number][] = [];
-  
-  // Start at contact position
-  const [contactTx, contactTy, contactTz] = applyTransform([contactX, contactY, contactZ]);
-  points.push([contactTx, contactTy, contactTz]);
-  
-  // Add trajectory points from contact to landing
+  points.push([pitchEndTx, pitchEndTy, pitchEndTz]);
   for (let i = 1; i <= N; ++i) {
     const t = (hangTime * i) / N;
     const landing = getLandingPoint(pitch.hit_trajectory, t);
     const [tx, ty, tz] = applyTransform(landing);
-    points.push([tx, ty, tz]);
+    points.push([tx + shiftX, ty + shiftY, tz + shiftZ]);
   }
-  
+
   return (
     <Line points={points} color={highlight ? "#fbbf24" : "#1e90ff"} lineWidth={highlight ? 4 : 2} />
   );
@@ -376,16 +407,7 @@ function PitchTrajectory3D({ pitch, highlight = false }: { pitch: any, highlight
   // Apply the pitch transform matrix to pitch trajectory points
   for (let i = 0; i < x.length; i++) {
     const [tx, ty, tz] = applyPitchTransform([x[i], y[i], z[i]]);
-    
-    // If we have valid contact data, end the pitch trajectory at the contact Z position
-    if (Number.isFinite(contactZ)) {
-      const [contactTx, contactTy, contactTz] = applyTransform([contactX, contactY, contactZ]);
-      if (tz >= contactTz) {
-        // Stop adding points once we reach the contact Z position
-        break;
-      }
-    }
-    
+
     points.push([tx, ty, tz]);
   }
   

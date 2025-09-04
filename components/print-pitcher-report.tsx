@@ -43,6 +43,7 @@ interface PrintPitcherReportProps {
   pitcher: any;
   games: any[]; // [{ season, games: [{ game_id, date, home_team, away_team, innings:[...] }]}]
   onClose: () => void;
+  skipGameSelection?: boolean; // When true, skip the game selection modal
 }
 
 interface GameSelectionModalProps {
@@ -278,11 +279,27 @@ export default function PrintPitcherReport({
   pitcher,
   games,
   onClose,
+  skipGameSelection = false,
 }: PrintPitcherReportProps) {
-  const [showGameSelection, setShowGameSelection] = React.useState(true);
+  const [showGameSelection, setShowGameSelection] = React.useState(!skipGameSelection);
   const [selectedSeason, setSelectedSeason] = React.useState<string>("");
   const [filteredGames, setFilteredGames] = React.useState<any[]>([]);
   const printableRef = useRef<HTMLDivElement>(null);
+
+  // Auto-set filtered games when skipGameSelection is true
+  React.useEffect(() => {
+    if (skipGameSelection && games.length > 0) {
+      // For [id] page, we know we're working with a specific game
+      // Extract all games from the games array and set them as filtered
+      const allGames = games.flatMap((season: any) => season.games || []);
+      setFilteredGames(allGames);
+      
+      // Set the season to the first available season for display purposes
+      if (games.length > 0 && games[0]?.season) {
+        setSelectedSeason(games[0].season);
+      }
+    }
+  }, [skipGameSelection, games]);
 
   // Build helpers
   const getPitchesFromGames = (gamesArray: any[]): any[] => {
