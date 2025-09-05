@@ -1139,7 +1139,7 @@ const PitchersTable = ({
             <TabsTrigger value="gameday" className="text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600">
               Gameday
             </TabsTrigger>
-            <TabsTrigger value="pitcher-analysis" className="text-sm font-bold data-[state=active]:bg-slate-600">
+            <TabsTrigger value="pitcher-analysis" className="text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600">
               Pitcher Trends
             </TabsTrigger>
             <TabsTrigger value="interactive-zone-analysis" className="text-sm font-bold data-[state=active]:bg-white dark:data-[state=active]:bg-slate-600">

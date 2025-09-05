@@ -135,6 +135,56 @@ export default function GamedayGamesTrend({
     "Other": "#95a5a6"
   };
 
+  // Custom tooltip component
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+
+    // unit source stays the same
+    const unit = config?.unit || "";
+
+    // For games trend, X = sequential_no (number). Keep only entries whose point exists at this X and has a value.
+    const xVal = label; // numeric pitch number
+    const validEntries = payload.filter((entry: any) => {
+      const hasValue = entry?.value != null && !Number.isNaN(entry.value);
+      const sameX =
+        entry?.payload?.sequential_no === xVal ||
+        entry?.payload?.pitch_no === xVal; // fallback if needed
+      return hasValue && sameX;
+    });
+
+    if (validEntries.length === 0) return null;
+
+    const data = validEntries[0].payload;
+
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+        <div className="mb-2">
+          <span className="text-sm text-gray-600">Pitch #{data.sequential_no}:</span>
+        </div>
+        {validEntries.map((entry: any, i: number) => {
+          const pitchType = entry.payload.pitch_type;
+          const color = pitchTypeColors[pitchType as keyof typeof pitchTypeColors] || "#95a5a6";
+          const value = entry.value;
+
+          return (
+            <div key={i} className="flex items-center justify-between space-x-3 py-1">
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-sm font-medium text-gray-900">{pitchType}</span>
+              </div>
+              <div className="text-right">
+                <span className="text-sm font-medium text-gray-900">{value}{unit}</span>
+                <div className="text-xs text-gray-500">
+                  {entry.payload.pitch_call}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   // Process data for games trend (single game analysis)
   const trendData: any = useMemo(() => {
     // Get all pitches from the single game
@@ -423,6 +473,7 @@ export default function GamedayGamesTrend({
                     type="number"
                     domain={[1, trendData.allPitchNumbers?.length || 1]}
                     allowDataOverflow={false}
+                    allowDuplicatedCategory={false}
                   />
                   <YAxis
                     domain={config?.yDomain || ["dataMin - 1", "dataMax + 1"]}
@@ -436,15 +487,7 @@ export default function GamedayGamesTrend({
                       fill: "#6b7280" 
                     }}
                   />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: "#ffffff",
-                      border: "1px solid #e5e7eb",
-                      borderRadius: "8px",
-                      color: "#374151",
-                    }}
-                    formatter={(value: any, name: string) => [`${value} ${config?.unit || ""}`, name]}
-                  />
+                  <Tooltip content={<CustomTooltip />} filterNull />
                   {Object.keys(trendData).map((pitchType) => {
                     if (pitchType === 'allPitchNumbers') return null;
                     const color = pitchTypeColors[pitchType as keyof typeof pitchTypeColors] || "#95a5a6";
@@ -460,6 +503,7 @@ export default function GamedayGamesTrend({
                         strokeWidth={3}
                         dot={{ fill: color, strokeWidth: 2, r: 6 }}
                         activeDot={{ r: 8, stroke: color, strokeWidth: 2 }}
+                        connectNulls={false}
                       />
                     );
                   })}

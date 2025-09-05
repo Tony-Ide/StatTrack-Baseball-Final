@@ -635,6 +635,41 @@ export default function HitterTrendsView({ games = [] }: HitterTrendsViewProps) 
     "overall": "#2d98da",
   }
 
+  // Custom tooltip component
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+
+    // unit source stays the same
+    const unit = config?.unit || "";
+
+    // For hitter trends, X = date (string). Keep only entries with non-null value.
+    const validEntries = payload.filter((entry: any) => entry?.value != null && !Number.isNaN(entry.value));
+    if (validEntries.length === 0) return null;
+
+    return (
+      <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+        <div className="mb-2">
+          <span className="text-sm text-gray-600">Date: {parseGameDate(label).toLocaleDateString()}</span>
+        </div>
+        {validEntries.map((entry: any, i: number) => {
+          const pitchType = entry.dataKey;
+          const color = pitchTypeColors[pitchType as keyof typeof pitchTypeColors] || "#95a5a6";
+          const value = entry.value;
+
+          return (
+            <div key={i} className="flex items-center justify-between space-x-3 py-1">
+              <div className="flex items-center space-x-2">
+                <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                <span className="text-sm font-medium text-gray-900">{pitchType === 'overall' ? 'Overall' : pitchType}</span>
+              </div>
+              <span className="text-sm font-medium text-gray-900">{value}{unit}</span>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   return (
     <div className="space-y-6">
       {/* Trend Type Selection */}
@@ -836,19 +871,14 @@ export default function HitterTrendsView({ games = [] }: HitterTrendsViewProps) 
                   angle={-45}
                   textAnchor="end"
                   height={80}
+                  allowDuplicatedCategory={false}
                 />
                 <YAxis 
                   domain={trendData.yDomain}
                   tick={{ fontSize: 12 }}
                   tickFormatter={(value) => `${Math.round(value * 100) / 100}${config?.unit || ''}`}
                 />
-                <Tooltip 
-                  formatter={(value: any, name: any) => [
-                    `${value}${config?.unit || ''}`, 
-                    name === 'overall' ? 'Overall' : name
-                  ]}
-                  labelFormatter={(label) => `Date: ${label}`}
-                />
+                <Tooltip content={<CustomTooltip />} filterNull />
                 {filterByPitchType ? (
                   trendData.allPitchTypes.map((pitchType: string) => (
                     <Line

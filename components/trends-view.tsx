@@ -140,6 +140,85 @@ export default function TrendsView({ games = [] }: TrendsViewProps) {
     "Other": "#95a5a6"
   }
 
+  // Custom tooltip component
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload || payload.length === 0) return null;
+
+    // unit source stays the same
+    const unit = config?.unit || cumulativeConfig?.unit || "";
+
+    if (trendType === "games") {
+      // For games, X = sequential_no (number). Keep only entries whose point exists at this X and has a value.
+      const xVal = label; // numeric pitch number
+      const validEntries = payload.filter((entry: any) => {
+        const hasValue = entry?.value != null && !Number.isNaN(entry.value);
+        const sameX =
+          entry?.payload?.sequential_no === xVal ||
+          entry?.payload?.pitch_no === xVal; // fallback if needed
+        return hasValue && sameX;
+      });
+
+      if (validEntries.length === 0) return null;
+
+      const data = validEntries[0].payload;
+
+      return (
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+          <div className="mb-2">
+            <span className="text-sm text-gray-600">Pitch #{data.sequential_no}:</span>
+          </div>
+          {validEntries.map((entry: any, i: number) => {
+            const pitchType = entry.payload.pitch_type;
+            const color = pitchTypeColors[pitchType as keyof typeof pitchTypeColors] || "#95a5a6";
+            const value = entry.value;
+
+            return (
+              <div key={i} className="flex items-center justify-between space-x-3 py-1">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                  <span className="text-sm font-medium text-gray-900">{pitchType}</span>
+                </div>
+                <div className="text-right">
+                  <span className="text-sm font-medium text-gray-900">{value}{unit}</span>
+                  <div className="text-xs text-gray-500">
+                    {entry.payload.pitch_call}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      );
+    } else {
+      // For season/cumulative, X = date (string). Keep only entries with non-null value.
+      const validEntries = payload.filter((entry: any) => entry?.value != null && !Number.isNaN(entry.value));
+      if (validEntries.length === 0) return null;
+
+      return (
+        <div className="bg-white border border-gray-200 rounded-lg shadow-lg p-3">
+          <div className="mb-2">
+            <span className="text-sm text-gray-600">Date: {parseGameDate(label).toLocaleDateString()}</span>
+          </div>
+          {validEntries.map((entry: any, i: number) => {
+            const pitchType = entry.dataKey;
+            const color = pitchTypeColors[pitchType as keyof typeof pitchTypeColors] || "#95a5a6";
+            const value = entry.value;
+
+            return (
+              <div key={i} className="flex items-center justify-between space-x-3 py-1">
+                <div className="flex items-center space-x-2">
+                  <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                  <span className="text-sm font-medium text-gray-900">{pitchType}</span>
+                </div>
+                <span className="text-sm font-medium text-gray-900">{value}{unit}</span>
+              </div>
+            );
+          })}
+        </div>
+      );
+    }
+  };
+
   // Process data based on trend type
   const trendData: any = useMemo(() => {
     if (trendType === "games") {
@@ -1331,6 +1410,7 @@ export default function TrendsView({ games = [] }: TrendsViewProps) {
                     scale={trendType !== "games" ? "point" : undefined}
                     domain={trendType === "games" && 'allPitchNumbers' in trendData ? [1, trendData.allPitchNumbers.length] : undefined}
                     allowDataOverflow={false}
+                    allowDuplicatedCategory={false}
                     tickFormatter={(value) => {
                       if (trendType !== "games") {
                         const date = parseGameDate(value);
@@ -1353,21 +1433,7 @@ export default function TrendsView({ games = [] }: TrendsViewProps) {
                       fill: "#6b7280" 
                     }}
                 />
-                <Tooltip
-                  contentStyle={{
-                      backgroundColor: "#ffffff",
-                      border: "1px solid #e5e7eb",
-                    borderRadius: "8px",
-                      color: "#374151",
-                  }}
-                  formatter={(value: any, name: string) => [`${value} ${config?.unit || cumulativeConfig?.unit}`, name]}
-                  labelFormatter={(label) => {
-                    if (trendType !== "games") {
-                      return parseGameDate(label).toLocaleDateString()
-                    }
-                    return label
-                  }}
-                />
+                <Tooltip content={<CustomTooltip />} filterNull />
                   {trendType !== "games" && 'allPitchTypes' in trendData ? (
                     // Season/cumulative trend with combined data
                     trendData.allPitchTypes.map((pitchType: string) => {
@@ -1382,6 +1448,7 @@ export default function TrendsView({ games = [] }: TrendsViewProps) {
                           strokeWidth={3}
                           dot={{ fill: color, strokeWidth: 2, r: 6 }}
                           activeDot={{ r: 8, stroke: color, strokeWidth: 2 }}
+                          connectNulls={false}
                         />
                       )
                     })
@@ -1401,6 +1468,7 @@ export default function TrendsView({ games = [] }: TrendsViewProps) {
                   strokeWidth={3}
                           dot={{ fill: color, strokeWidth: 2, r: 6 }}
                           activeDot={{ r: 8, stroke: color, strokeWidth: 2 }}
+                          connectNulls={false}
                 />
                       )
                     })
