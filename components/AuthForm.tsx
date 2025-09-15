@@ -27,11 +27,11 @@ export default function AuthForm({ onAuth, mode, teams = [], error }: AuthFormPr
     if (mode === "register" && (!email || !password || !team)) return
     if (mode === "login" && (!email || !password)) return
     
-    // Block .edu email addresses for registration
+    // Only allow .edu email addresses for registration
     if (mode === "register") {
       const emailDomain = email.split('@')[1]?.toLowerCase()
-      if (emailDomain && emailDomain.endsWith('.edu')) {
-        alert('.edu email addresses are not allowed for registration. Please use a different email address.')
+      if (!emailDomain || !emailDomain.endsWith('.edu')) {
+        alert('Only .edu email addresses are allowed for registration. Please use your educational institution email.')
         return
       }
     }

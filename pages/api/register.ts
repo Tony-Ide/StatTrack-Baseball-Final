@@ -21,10 +21,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     return res.status(400).json({ error: 'Please enter a valid email address' })
   }
 
-  // Block .edu email addresses
+  // Only allow .edu email addresses
   const emailDomain = email.split('@')[1]?.toLowerCase()
-  if (emailDomain && emailDomain.endsWith('.edu')) {
-    return res.status(400).json({ error: '.edu email addresses are not allowed for registration' })
+  if (!emailDomain || !emailDomain.endsWith('.edu')) {
+    return res.status(400).json({ error: 'Only .edu email addresses are allowed for registration' })
   }
   
   try {

@@ -69,6 +69,149 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
   const [selectedPitch, setSelectedPitch] = useState<any>(null)
   const [selectedZonePitch, setSelectedZonePitch] = useState<any>(null)
   const [showPitcherReports, setShowPitcherReports] = useState(false)
+  const [pitcherCache, setPitcherCache] = useState<{ [key: string]: string }>({})
+  const [pitcherCacheLoaded, setPitcherCacheLoaded] = useState(false)
+
+  // Pitcher cache management functions
+  const PITCHER_CACHE_KEY = 'hatetrackman_pitcher_cache'
+  const CACHE_GAME_KEY = 'hatetrackman_cache_game_id'
+  
+  const loadPitcherCache = (gameId: string): { [key: string]: string } => {
+    try {
+      const cachedGameId = localStorage.getItem(CACHE_GAME_KEY)
+      const cached = localStorage.getItem(PITCHER_CACHE_KEY)
+      
+      // Only use cache if it's for the same game
+      if (cached && cachedGameId === gameId) {
+        const parsedCache = JSON.parse(cached)
+        console.log('=== PITCHER CACHE LOADED FROM LOCALSTORAGE ===')
+        console.log('Game ID:', gameId)
+        console.log('Cached pitcher mappings:', parsedCache)
+        console.log('=== END PITCHER CACHE DEBUG ===')
+        return parsedCache
+      }
+    } catch (error) {
+      console.error('Error loading pitcher cache:', error)
+    }
+    return {}
+  }
+
+  const savePitcherCache = (cache: { [key: string]: string }, gameId: string) => {
+    try {
+      localStorage.setItem(PITCHER_CACHE_KEY, JSON.stringify(cache))
+      localStorage.setItem(CACHE_GAME_KEY, gameId)
+      console.log('=== PITCHER CACHE SAVED TO LOCALSTORAGE ===')
+      console.log('Game ID:', gameId)
+      console.log('Saved pitcher mappings:', cache)
+      console.log('=== END PITCHER CACHE SAVE DEBUG ===')
+    } catch (error) {
+      console.error('Error saving pitcher cache:', error)
+    }
+  }
+
+  const clearPitcherCache = () => {
+    try {
+      localStorage.removeItem(PITCHER_CACHE_KEY)
+      localStorage.removeItem(CACHE_GAME_KEY)
+      console.log('=== PITCHER CACHE CLEARED ===')
+    } catch (error) {
+      console.error('Error clearing pitcher cache:', error)
+    }
+  }
+
+  // Helper function to extract all unique pitcher IDs from games data
+  const extractPitcherIds = (gamesData: any[]): string[] => {
+    const pitcherIds = new Set<string>()
+    
+    gamesData.forEach((season: any) => {
+      season.games?.forEach((game: any) => {
+        game.innings?.forEach((inning: any) => {
+          inning.plate_appearances?.forEach((pa: any) => {
+            pa.pitches?.forEach((pitch: any) => {
+              if (pitch.pitcher_id) {
+                pitcherIds.add(pitch.pitcher_id)
+              }
+            })
+          })
+        })
+      })
+    })
+    
+    return Array.from(pitcherIds)
+  }
+
+  // Build pitcher cache when games data is available
+  useEffect(() => {
+    const buildPitcherCache = async () => {
+      if (!games.length || !currentGame) return
+      
+      try {
+        console.log('=== BUILDING PITCHER CACHE ===')
+        
+        // Try to load existing cache first
+        const existingCache = loadPitcherCache(currentGame.game_uid)
+        
+        // Extract all pitcher IDs from games data
+        const allPitcherIds = extractPitcherIds(games)
+        console.log('Unique pitcher IDs found:', allPitcherIds)
+        
+        // Check if we need to fetch any missing pitcher data
+        const missingPitcherIds = allPitcherIds.filter(id => !existingCache[id])
+        
+        if (missingPitcherIds.length > 0) {
+          console.log('Fetching missing pitcher data for IDs:', missingPitcherIds)
+          
+          // Fetch missing pitcher data from Supabase
+          const { data: playersData, error } = await supabase
+            .from('players')
+            .select('player_id, name')
+            .in('player_id', missingPitcherIds)
+          
+          if (error) {
+            console.error('Error fetching pitcher data:', error)
+            setPitcherCacheLoaded(true)
+            return
+          }
+          
+          // Build updated cache
+          const updatedCache = { ...existingCache }
+          playersData?.forEach((player: any) => {
+            updatedCache[player.player_id] = player.name || 'Unknown Pitcher'
+          })
+          
+          // Add any pitcher IDs that weren't found in the database
+          missingPitcherIds.forEach(id => {
+            if (!updatedCache[id]) {
+              updatedCache[id] = 'Unknown Pitcher'
+            }
+          })
+          
+          setPitcherCache(updatedCache)
+          savePitcherCache(updatedCache, currentGame.game_uid)
+          console.log('Updated pitcher cache:', updatedCache)
+        } else {
+          console.log('All pitcher data already cached')
+          setPitcherCache(existingCache)
+        }
+        
+        setPitcherCacheLoaded(true)
+        console.log('=== PITCHER CACHE BUILD COMPLETE ===')
+      } catch (error) {
+        console.error('Error building pitcher cache:', error)
+        setPitcherCacheLoaded(true)
+      }
+    }
+    
+    buildPitcherCache()
+  }, [games, currentGame])
+
+  // Clear cache when component unmounts or game changes
+  useEffect(() => {
+    return () => {
+      // Clear cache when leaving the page
+      clearPitcherCache()
+    }
+  }, [])
 
   useEffect(() => {
     const fetchGameData = async () => {
@@ -401,6 +544,10 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
           const hitter = allHitters.find(h => h.batter_id === hitterId)
           const hitterName = hitter?.name || `Unknown (${hitterId})`
 
+          // Get pitcher name from first pitch using cache
+          const firstPitch = pa.pitches?.[0]
+          const pitcherName = firstPitch?.pitcher_id ? (pitcherCache[firstPitch.pitcher_id] || 'Unknown Pitcher') : 'Unknown Pitcher'
+
           // Format the result text based on kor_bb
           let resultText = ''
           if (lastPitch.pitch_call === 'HitByPitch') {
@@ -422,6 +569,7 @@ export default function MLBGameDay({ game }: MLBGameDayProps) {
             top_bottom: inning.top_bottom,
             pa_of_inning: pa.pa_of_inning,
             hitterName,
+            pitcherName,
             result: resultText,
             count,
             outs,
@@ -1190,8 +1338,15 @@ const PitchersTable = ({
                               </div>
                           <span className="text-xs text-slate-500 dark:text-slate-400 font-mono">{atBat.count}</span>
                         </div>
-                        <div className="font-semibold text-sm mb-1 text-slate-900 dark:text-slate-100">
-                              {selectedPitcher ? atBat.batterName : atBat.hitterName}
+                        <div className="text-sm mb-1 text-slate-900 dark:text-slate-100 space-y-1">
+                          <div>
+                            <span className="text-slate-600 dark:text-slate-400">Batter:</span>{' '}
+                            <span className="font-semibold">{selectedPitcher ? atBat.batterName : atBat.hitterName}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-600 dark:text-slate-400">Pitcher:</span>{' '}
+                            <span className="font-semibold">{atBat.pitcherName}</span>
+                          </div>
                         </div>
                             <div className="text-xs text-slate-600 dark:text-slate-400 mb-2">Outs: {atBat.outs}</div>
                         <div className="text-xs font-medium text-blue-600 dark:text-blue-400">{atBat.result}</div>
@@ -1269,6 +1424,8 @@ const PitchersTable = ({
                     selectedPitch={selectedPitch}
                     onPitchSelect={setSelectedPitch}
                     selectedPlateAppearance={selectedPlateAppearance}
+                    pitcherCache={pitcherCache}
+                    pitcherCacheLoaded={pitcherCacheLoaded}
                   />
               </CardContent>
             </Card>

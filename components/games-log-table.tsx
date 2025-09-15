@@ -1,9 +1,10 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { displayInningsPitched, parseGameDate } from "@/lib/utils"
+import { supabase } from "@/lib/supabase"
 
 interface GamesLogTableProps {
   player: any
@@ -15,6 +16,7 @@ interface GamesLogTableProps {
 interface GameStats {
   game_id: string
   date: string
+  opponent: string  // Opponent team name
   plateAppearances: number
   inningsPitched?: number // Only for pitchers
   hits: number
@@ -39,6 +41,7 @@ interface GameStats {
 export default function GamesLogTable({ player, games, playerType, className = "" }: GamesLogTableProps) {
   const [selectedSeason, setSelectedSeason] = useState("all")
   const [selectedMonth, setSelectedMonth] = useState("all")
+  const [teamMappings, setTeamMappings] = useState<{ [key: string]: string }>({}) // player_id -> team_name
 
   // Helper to get all pitches from the hierarchical seasons structure
   const getAllPitches = (): any[] => {
@@ -56,6 +59,73 @@ export default function GamesLogTable({ player, games, playerType, className = "
     });
     return allPitches;
   };
+
+  // Helper to find opponent player ID for a specific game
+  const getOpponentPlayerId = (gameId: string): string | null => {
+    const allPitches = getAllPitches();
+    const gamePitches = allPitches.filter(pitch => pitch.game_id === gameId);
+    
+    // For the current player, find an opponent
+    const playerIdField = playerType === 'pitcher' ? 'pitcher_id' : 'batter_id';
+    const opponentIdField = playerType === 'pitcher' ? 'batter_id' : 'pitcher_id';
+    
+    // Find a pitch where this player is involved
+    const playerPitch = gamePitches.find(pitch => pitch[playerIdField] === player?.player_id);
+    if (playerPitch && playerPitch[opponentIdField]) {
+      return playerPitch[opponentIdField];
+    }
+    
+    return null;
+  };
+
+  // Fetch opponent team data when component mounts or games change
+  useEffect(() => {
+    const fetchOpponentTeams = async () => {
+      try {
+        // Get all unique opponent player IDs from all games
+        const opponentPlayerIds = new Set<string>();
+        games.forEach((season: any) => {
+          season.games?.forEach((game: any) => {
+            const opponentPlayerId = getOpponentPlayerId(game.game_id);
+            if (opponentPlayerId) {
+              opponentPlayerIds.add(opponentPlayerId);
+            }
+          });
+        });
+
+        if (opponentPlayerIds.size === 0) return;
+
+        // Fetch player data with team information from Supabase
+        const { data: playersData, error } = await supabase
+          .from('players')
+          .select(`
+            player_id,
+            team_id,
+            teams (
+              name
+            )
+          `)
+          .in('player_id', Array.from(opponentPlayerIds));
+
+        if (error) {
+          console.error('Error fetching opponent teams:', error);
+          return;
+        }
+
+        // Build team mappings: player_id -> team_name
+        const mappings: { [key: string]: string } = {};
+        playersData?.forEach((player: any) => {
+          mappings[player.player_id] = player.teams?.name || 'Unknown Team';
+        });
+
+        setTeamMappings(mappings);
+      } catch (error) {
+        console.error('Error in fetchOpponentTeams:', error);
+      }
+    };
+
+    fetchOpponentTeams();
+  }, [games, player, playerType]);
 
   const gameStats = useMemo((): GameStats[] => {
     // Get all games where this player appeared, sorted by date (latest first)
@@ -175,9 +245,14 @@ export default function GamesLogTable({ player, games, playerType, className = "
       const gameBabipDenominator = gamePA - gameSO - gameHR - gameBB - gameHBP;
       const gameBABIP = gameBabipDenominator > 0 ? (gameBabipHits / gameBabipDenominator).toFixed(3) : '0.000';
       
+      // Get opponent team name
+      const opponentPlayerId = getOpponentPlayerId(game.game_id);
+      const opponentTeam = opponentPlayerId ? (teamMappings[opponentPlayerId] || 'Unknown') : 'Unknown';
+      
       return {
         game_id: game.game_id,
         date: game.date,
+        opponent: opponentTeam,
         plateAppearances: gamePA,
         inningsPitched: gameIP,
         hits: gameHits,
@@ -199,7 +274,7 @@ export default function GamesLogTable({ player, games, playerType, className = "
         babip: gameBABIP
       };
     });
-  }, [player, games, playerType, selectedSeason, selectedMonth]);
+  }, [player, games, playerType, selectedSeason, selectedMonth, teamMappings]);
 
   return (
     <div className={`space-y-6 ${className}`}>
@@ -288,6 +363,7 @@ export default function GamesLogTable({ player, games, playerType, className = "
               <thead>
                 <tr className="bg-gray-50 border-b-2 border-gray-200">
                   <th className="text-left py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">Date</th>
+                  <th className="text-left py-3 px-4 font-bold text-gray-700 text-xs uppercase tracking-wider">Opponent</th>
                   <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs uppercase tracking-wider">G</th>
                   <th className="text-center py-3 px-2 font-bold text-gray-700 text-xs uppercase tracking-wider">PA</th>
                   {playerType === 'pitcher' && (
@@ -330,6 +406,7 @@ export default function GamesLogTable({ player, games, playerType, className = "
                 {gameStats.map((game, index) => (
                   <tr key={game.game_id} className="hover:bg-blue-50 transition-colors duration-150">
                     <td className="py-3 px-4 font-medium text-gray-900">{parseGameDate(game.date).toLocaleDateString()}</td>
+                    <td className="py-3 px-4 font-medium text-gray-900">{game.opponent}</td>
                     <td className="py-3 px-2 text-center font-semibold text-gray-900">1</td>
                     <td className="py-3 px-2 text-center font-semibold text-gray-900">{game.plateAppearances}</td>
                     {playerType === 'pitcher' && game.inningsPitched !== undefined && (

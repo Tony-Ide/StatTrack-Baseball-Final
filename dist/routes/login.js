@@ -27,7 +27,10 @@ exports.default = default_1;
 const supabase_1 = require("../lib/supabase");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const JWT_SECRET = 'supersecretkey123';
+const JWT_SECRET = process.env.JWT_SECRET;
+if (!JWT_SECRET) {
+    throw new Error('JWT_SECRET environment variable is not set');
+}
 function default_1(req, res) {
     return __awaiter(this, void 0, void 0, function* () {
         if (req.method !== 'POST') {

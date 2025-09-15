@@ -7,6 +7,7 @@ import { OrbitControls } from "@react-three/drei"
 import * as THREE from "three"
 import { FBXLoader } from "three-stdlib"
 import { Line } from '@react-three/drei'
+import { supabase } from "@/lib/supabase"
 
 // Transformation matrix from user (for hit trajectory)
 const transformMatrix = [
@@ -489,9 +490,92 @@ interface GameDayViewerProps {
   selectedPitch?: any
   onPitchSelect?: (pitch: any) => void
   selectedPlateAppearance?: any
+  pitcherCache?: { [key: string]: string }
+  pitcherCacheLoaded?: boolean
 }
 
-export default function GameDayViewer({ games, selectedPitch, onPitchSelect, selectedPlateAppearance }: GameDayViewerProps) {
+// Pitch Metrics Panel Component
+function PitchMetricsPanel({ pitch, pitcherCache }: { pitch: any; pitcherCache: { [key: string]: string } }) {
+  // Get pitcher name directly from cache
+  const pitcherName = pitch?.pitcher_id ? (pitcherCache[pitch.pitcher_id] || 'Unknown Pitcher') : 'Unknown Pitcher';
+
+  if (!pitch) return null;
+
+  const metrics = pitch.pitching_metrics || {};
+  
+  // Format values with appropriate units and decimal places
+  const formatValue = (value: number | null | undefined, unit: string, decimals: number = 1): string => {
+    if (value == null || value === undefined) return 'N/A';
+    return `${value.toFixed(decimals)} ${unit}`;
+  };
+
+  return (
+    <div className="absolute top-4 left-4 z-10 bg-black/80 backdrop-blur-sm rounded-lg p-4 text-white text-sm max-w-xs">
+      <div className="space-y-2">
+        {/* Pitcher Name */}
+        <div className="font-bold text-base text-orange-400 border-b border-gray-600 pb-2">
+          {pitcherName}
+        </div>
+        
+        {/* Pitch Type */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Pitch Type</span>
+          <span className="font-semibold">{pitch.auto_pitch_type || pitch.tagged_pitch_type || 'Unknown'}</span>
+        </div>
+
+        {/* Velocity */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Velocity</span>
+          <span className="font-semibold">{formatValue(metrics.rel_speed, 'mph')}</span>
+        </div>
+
+        {/* Spin Rate */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Spin Rate</span>
+          <span className="font-semibold">{formatValue(metrics.spin_rate, 'rpm', 0)}</span>
+        </div>
+
+        {/* Induced VB */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Induced VB</span>
+          <span className="font-semibold">{formatValue(metrics.induced_vert_break, '"')}</span>
+        </div>
+
+        {/* Horizontal Break */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Horizontal Break</span>
+          <span className="font-semibold">{formatValue(metrics.horz_break, '"')}</span>
+        </div>
+
+        {/* Spin Axis */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Spin Axis</span>
+          <span className="font-semibold">{formatValue(metrics.spin_axis, '°')}</span>
+        </div>
+
+        {/* Extension */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Extension</span>
+          <span className="font-semibold">{formatValue(metrics.extension, 'ft')}</span>
+        </div>
+
+        {/* Rel Height */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Rel Height</span>
+          <span className="font-semibold">{formatValue(metrics.rel_height, 'ft')}</span>
+        </div>
+
+        {/* Rel Side */}
+        <div className="grid grid-cols-2 gap-x-2">
+          <span className="text-gray-300">Rel Side</span>
+          <span className="font-semibold">{formatValue(metrics.rel_side, 'ft')}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export default function GameDayViewer({ games, selectedPitch, onPitchSelect, selectedPlateAppearance, pitcherCache = {}, pitcherCacheLoaded = false }: GameDayViewerProps) {
   const [isCameraLocked, setIsCameraLocked] = useState(false);
   const [localSelectedPitch, setLocalSelectedPitch] = useState<any>(null);
   const [maintainCatcherView, setMaintainCatcherView] = useState(false);
@@ -646,6 +730,12 @@ export default function GameDayViewer({ games, selectedPitch, onPitchSelect, sel
             }} 
           />
         </Canvas>
+        
+        {/* Pitch Metrics Panel - positioned in top left corner */}
+        {currentSelectedPitch && pitcherCacheLoaded && (
+          <PitchMetricsPanel pitch={currentSelectedPitch} pitcherCache={pitcherCache} />
+        )}
+        
         {/* Camera Control Buttons - positioned outside Canvas */}
         <div className="absolute top-4 right-4 z-10 flex gap-2">
           {currentSelectedPitch && (
