@@ -70,9 +70,10 @@ type VelocityKDEProps = {
   pitchesByType: Record<string, any[]>;
   pitchColors: Record<string, string>;
   velocityRange: { min: number; max: number };
+  rowHeightPx?: number;
 };
 
-function VelocityKDE({ pitchTypes, pitchesByType, pitchColors, velocityRange }: VelocityKDEProps) {
+function VelocityKDE({ pitchTypes, pitchesByType, pitchColors, velocityRange, rowHeightPx }: VelocityKDEProps) {
   // build a fixed x-grid (samples across the range)
   const samples = 80;
   const min = velocityRange.min;
@@ -121,7 +122,7 @@ function VelocityKDE({ pitchTypes, pitchesByType, pitchColors, velocityRange }: 
         return (
           <div key={t} className="flex items-center space-x-2">
             <div className="w-20 text-right text-xs font-medium">{t}</div>
-            <div className="relative h-12 flex-1 rounded bg-gray-50 overflow-hidden">
+            <div className="relative flex-1 rounded bg-gray-50 overflow-hidden" style={{ height: (rowHeightPx ?? 48) }}>
               <svg viewBox="0 0 1000 100" preserveAspectRatio="none" className="h-full w-full">
                 <path d={path} fill={color} opacity={0.22} />
                 <path d={pathTop} fill="none" stroke={color} strokeWidth={2} />
@@ -392,6 +393,16 @@ export default function PrintPitcherReport({
     [pitchesByType]
   );
 
+  // Ensure consistent height for top-row graphs as if 4 pitch types are shown
+  const assumedPitchTypeRows = 4;
+  const perRowPx = 48; // approximately h-12
+  const velocityHeaderAndAxisPx = 80; // title + x-axis ticks area + paddings
+  const topBoxMinHeightPx = assumedPitchTypeRows * perRowPx + velocityHeaderAndAxisPx;
+  // Dynamic row height when there are more than 5 pitch types
+  const rowsForCalc = Math.max(assumedPitchTypeRows, pitchTypes.length || 0);
+  const contentAvailPx = Math.max(120, topBoxMinHeightPx - velocityHeaderAndAxisPx);
+  const dynamicRowHeightPx = Math.max(18, Math.floor(contentAvailPx / rowsForCalc));
+
   // Ranges (selected games)
   const velocityRange = useMemo(() => {
     const speeds = validPitches.map((p: any) => p.pitching_metrics.rel_speed);
@@ -505,9 +516,9 @@ export default function PrintPitcherReport({
         </div>
 
         {/* Printable content */}
-        <div ref={printableRef} className="p-6 print:p-5 printable-report">
+        <div ref={printableRef} className="p-6 print:p-4 printable-report">
           {/* Spacer Row */}
-          <div className="h-8 print:h-4" />
+          <div className="h-8 print:h-2" />
 
           {/* Title + Table */}
           <div className="avoid-break mb-8 print:mb-6">
@@ -533,8 +544,8 @@ export default function PrintPitcherReport({
               </p>
             </div>
 
-            <div className="overflow-x-auto rounded border border-gray-300 print:border-2 print:border-gray-800 print:overflow-visible">
-              <table className="w-full text-sm min-w-[1200px] print:min-w-full print:border-collapse print:text-xs">
+            <div className="overflow-x-auto rounded border border-gray-300 print:border print:border-gray-800 print:overflow-visible">
+              <table className="w-full text-sm min-w-[1200px] print:min-w-full print:border-collapse print:text-[11px]">
                 <thead>
                   <tr className="bg-gray-100">
                     {[
@@ -556,7 +567,7 @@ export default function PrintPitcherReport({
                     ].map((h, i) => (
                       <th
                         key={h}
-                        className={`px-3 py-2 text-center font-bold whitespace-nowrap ${
+                        className={`px-3 py-2 text-center font-bold whitespace-nowrap print:px-2 print:py-1 ${
                           i < 14 ? "border-r border-gray-300" : ""
                         }`}
                       >
@@ -570,28 +581,28 @@ export default function PrintPitcherReport({
                     const c = pitchColors[row.pitchType] ?? "#000";
                     return (
                       <tr key={row.pitchType} className="border-b border-gray-200">
-                        <td className="whitespace-nowrap px-3 py-2 font-medium text-left text-black"
+                        <td className="whitespace-nowrap px-3 py-2 print:px-2 print:py-1 font-medium text-left text-black"
                             style={{ color: c }}>
                           {row.pitchType}
                         </td>
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">
                           {row.count.toLocaleString()}
                         </td>
-                        <td className="px-3 py-2 text-center">
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">
                           {row.pitchPercent.toFixed(1)}%
                         </td>
-                        <td className="px-3 py-2 text-center">{row.avgVelocity.toFixed(1)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgIVB.toFixed(1)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgHB.toFixed(1)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgVAA.toFixed(1)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgSpinRate.toFixed(0)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgSpinAxis.toFixed(0)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgRelHeight.toFixed(2)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgRelSide.toFixed(2)}</td>
-                        <td className="px-3 py-2 text-center">{row.avgExt.toFixed(2)}</td>
-                        <td className="px-3 py-2 text-center">{row.whiffPercent.toFixed(1)}%</td>
-                        <td className="px-3 py-2 text-center">{row.zonePercent.toFixed(1)}%</td>
-                        <td className="px-3 py-2 text-center">{row.chasePercent.toFixed(1)}%</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgVelocity.toFixed(1)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgIVB.toFixed(1)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgHB.toFixed(1)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgVAA.toFixed(1)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgSpinRate.toFixed(0)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgSpinAxis.toFixed(0)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgRelHeight.toFixed(2)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgRelSide.toFixed(2)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.avgExt.toFixed(2)}</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.whiffPercent.toFixed(1)}%</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.zonePercent.toFixed(1)}%</td>
+                        <td className="px-3 py-2 print:px-2 print:py-1 text-center">{row.chasePercent.toFixed(1)}%</td>
                       </tr>
                     );
                   })}
@@ -601,11 +612,11 @@ export default function PrintPitcherReport({
           </div>
 
           {/* Graphs Layout: 2x2 Grid with equal-sized graphs */}
-          <div className="grid grid-cols-2 gap-6 print:gap-4 h-[800px] print:h-[600px]">
+          <div className="grid grid-cols-2 gap-6 print:gap-3 h-[800px] print:h-[520px]">
             {/* Top Left: Velocity Distribution */}
             <div className="avoid-break h-full">
-              <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2">
-                <h2 className="mb-4 text-lg font-bold print:mb-2 print:text-sm">
+              <div className="h-full rounded border border-gray-300 p-4 print:border print:border-gray-800 print:p-2" style={{ minHeight: topBoxMinHeightPx }}>
+                <h2 className="mb-4 text-lg font-bold print:mb-1 print:text-xs">
                   Pitch Velocity Distribution
                 </h2>
 
@@ -619,6 +630,7 @@ export default function PrintPitcherReport({
                       pitchesByType={pitchesByType}
                       pitchColors={pitchColors}
                       velocityRange={velocityRange}
+                      rowHeightPx={dynamicRowHeightPx}
                     />
                   )}
               </div>
@@ -626,9 +638,9 @@ export default function PrintPitcherReport({
 
             {/* Top Right: Spin Axis Plot */}
             <div className="avoid-break h-full">
-              <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2 relative">
-                <h2 className="absolute left-4 top-4 z-10 text-lg font-bold print:left-2 print:top-2 print:text-sm">Spin Axis Plot</h2>
-                <div className="absolute inset-0 p-4 print:p-2 flex items-center justify-center">
+              <div className="h-full rounded border border-gray-300 p-4 print:border print:border-gray-800 print:p-2 relative" style={{ minHeight: topBoxMinHeightPx }}>
+                <h2 className="absolute left-4 top-4 z-10 text-lg font-bold print:left-2 print:top-2 print:text-xs">Spin Axis Plot</h2>
+                <div className="absolute inset-0 p-4 print:p-1.5 flex items-center justify-center">
                   <div className="relative h-[100%] aspect-square w-auto max-w-[100%] overflow-hidden">
                       {/* circle with internal padding */}
                     <div className="absolute rounded-full border-2 border-gray-300" style={{ left: '6%', top: '6%', right: '6%', bottom: '6%' }} />
@@ -686,8 +698,8 @@ export default function PrintPitcherReport({
 
             {/* Bottom Left: Pitch Breaks Plot (Square) */}
             <div className="avoid-break h-full">
-              <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2">
-                <h2 className="mb-4 text-lg font-bold print:mb-2 print:text-sm">Pitch Breaks</h2>
+              <div className="h-full rounded border border-gray-300 p-4 print:border print:border-gray-800 print:p-2">
+                <h2 className="mb-4 text-lg font-bold print:mb-1 print:text-xs">Pitch Breaks</h2>
                 <div className="relative w-full rounded border border-gray-300 overflow-hidden" style={{ aspectRatio: "1" }}>
                     {/* normal graphing grid: light lines every 10% */}
                     {Array.from({ length: 9 }, (_, i) => {
@@ -725,13 +737,13 @@ export default function PrintPitcherReport({
 
                     {/* axis titles at actual axes (y=center, x=center); y not rotated */}
                     <div
-                      className="absolute text-xs text-gray-600"
+                      className="absolute text-xs print:text-[10px] text-gray-600"
                       style={{ left: "50%", bottom: "10px", transform: "translateX(-50%)" }}
                     >
                       Horizontal Break (in)
                     </div>
                     <div
-                      className="absolute text-xs text-gray-600"
+                      className="absolute text-xs print:text-[10px] text-gray-600"
                       style={{ left: "-50px", top: "50%", transform: "translateY(-50%) rotate(-90deg)" }}
                     >
                       Induced Vertical Break (in)
@@ -784,8 +796,8 @@ export default function PrintPitcherReport({
 
             {/* Bottom Right: Release Position Plot */}
             <div className="avoid-break h-full">
-              <div className="h-full rounded border border-gray-300 p-4 print:border-2 print:border-gray-800 print:p-2">
-                <h2 className="mb-4 text-lg font-bold print:mb-2 print:text-sm">Release Position</h2>
+              <div className="h-full rounded border border-gray-300 p-4 print:border print:border-gray-800 print:p-2">
+                <h2 className="mb-4 text-lg font-bold print:mb-1 print:text-xs">Release Position</h2>
                                 <div className="relative w-full rounded border border-gray-300 overflow-hidden" style={{ aspectRatio: "1.25" }}>
                   {/* Y-axis grid lines: align with 0-8 labels - BACKGROUND */}
                   {Array.from({ length: 9 }, (_, i) => {
